@@ -47,7 +47,8 @@ public class PostgresImagenServicioStore implements ImagenServicioStore {
         imagen.setBytesLen(bytes.length);
         imagen.setActualizadoEn(ahora);
 
-        servicioImagenRepository.save(imagen);
+        sku.setImagen(imagen);
+        servicioImagenRepository.saveAndFlush(imagen);
 
         String url = "/api/public/servicios/" + codigoServicio + "/imagen?v=" + ahora.toEpochMilli();
         return new ImagenGuardada(url, ahora);
@@ -64,8 +65,17 @@ public class PostgresImagenServicioStore implements ImagenServicioStore {
     @Transactional
     @CacheEvict(value = "catalogo", allEntries = true)
     public void eliminar(String codigoServicio) {
-        servicioImagenRepository.findByCodigoServicio(codigoServicio)
-                .ifPresent(servicioImagenRepository::delete);
+        skuCategoriaRepository.findByCodigo(codigoServicio).ifPresent(sku -> {
+            if (sku.getImagen() != null) {
+                ServicioImagen img = sku.getImagen();
+                sku.setImagen(null);
+                servicioImagenRepository.delete(img);
+            } else {
+                servicioImagenRepository.findByCodigoServicio(codigoServicio)
+                        .ifPresent(servicioImagenRepository::delete);
+            }
+        });
+        servicioImagenRepository.flush();
     }
 
     @Override

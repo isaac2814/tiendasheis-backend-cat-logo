@@ -67,6 +67,9 @@ public class SkuCategoria {
     @OneToMany(mappedBy = "skuCategoria", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<Tarifa> tarifas = new ArrayList<>();
 
+    @OneToOne(mappedBy = "skuCategoria", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private ServicioImagen imagen;
+
     public SkuCategoria() {
     }
 

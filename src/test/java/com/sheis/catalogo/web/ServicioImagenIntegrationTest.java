@@ -258,11 +258,13 @@ class ServicioImagenIntegrationTest {
                         .visible(true)
                         .build()
         );
+        skuCategoriaRepository.flush();
         // Guardar imagen en repositorio
         com.sheis.catalogo.domain.ServicioImagen imagen = new com.sheis.catalogo.domain.ServicioImagen(
                 sku, "image/png", VALID_PNG_BYTES, VALID_PNG_BYTES.length, Instant.now()
         );
-        servicioImagenRepository.save(imagen);
+        sku.setImagen(imagen);
+        servicioImagenRepository.saveAndFlush(imagen);
         assertThat(servicioImagenRepository.existsById(sku.getId())).isTrue();
 
         // Al eliminar el servicio
