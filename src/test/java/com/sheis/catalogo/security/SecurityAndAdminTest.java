@@ -133,4 +133,36 @@ class SecurityAndAdminTest {
                         .content(loginJson))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @DisplayName("El rate limiter ignora X-Forwarded-For: falsificar la IP no evade el bloqueo")
+    void testRateLimiterNoSeEludeConXForwardedFor() throws Exception {
+        String loginJson = "{\"email\":\"bruteforce@test.com\",\"password\":\"clave_mala\"}";
+        String ipReal = "203.0.113.7";
+
+        // 5 intentos fallidos desde la misma IP real, cada uno con un X-Forwarded-For distinto.
+        for (int i = 0; i < 5; i++) {
+            String xff = "10.0.0." + i;
+            mockMvc.perform(post("/api/auth/login")
+                            .header("X-Forwarded-For", xff)
+                            .with(request -> {
+                                request.setRemoteAddr(ipReal);
+                                return request;
+                            })
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(loginJson))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        // El 6º intento debe quedar bloqueado pese a otro X-Forwarded-For diferente.
+        mockMvc.perform(post("/api/auth/login")
+                        .header("X-Forwarded-For", "10.0.0.99")
+                        .with(request -> {
+                            request.setRemoteAddr(ipReal);
+                            return request;
+                        })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(loginJson))
+                .andExpect(status().isTooManyRequests());
+    }
 }

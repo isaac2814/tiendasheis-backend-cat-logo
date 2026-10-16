@@ -84,7 +84,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleUnauthorized(Exception ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(
                 HttpStatus.UNAUTHORIZED,
-                ex.getMessage() != null && !ex.getMessage().isBlank() ? ex.getMessage() : "Credenciales inválidas o token no autorizado"
+                "Credenciales inválidas o token no autorizado"
         );
         problem.setTitle("No autorizado");
         problem.setType(URI.create("urn:problem:unauthorized"));

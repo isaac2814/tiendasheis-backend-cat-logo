@@ -7,5 +7,6 @@ public record MetodoPagoDto(
         String color,
         String etiquetaDato,
         String dato,
-        String titular
+        String titular,
+        String imagenUrl
 ) {}

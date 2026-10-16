@@ -18,6 +18,7 @@ public class AppProperties {
     private Cors cors = new Cors();
     private Jwt jwt = new Jwt();
     private Admin admin = new Admin();
+    private Proxy proxy = new Proxy();
 
     @Getter
     @Setter
@@ -47,6 +48,18 @@ public class AppProperties {
     public static class Admin {
         private String email = "";
         private String password = "";
+    }
+
+    @Getter
+    @Setter
+    public static class Proxy {
+        /**
+         * Activar SOLO si la aplicación está detrás de un proxy inverso de confianza
+         * (nginx, Traefik, balanceador, etc.) que sobrescribe {@code X-Forwarded-For}.
+         * Si es {@code false} (por defecto) se usa la IP real del socket, evitando que
+         * un cliente falsifique su IP para eludir el límite de intentos de login.
+         */
+        private boolean trustForwardedHeaders = false;
     }
 
     @PostConstruct

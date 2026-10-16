@@ -25,5 +25,6 @@ public record AdminMetodoPagoDto(
         String titular,
 
         Boolean activo,
-        Integer orden
+        Integer orden,
+        String imagenUrl
 ) {}

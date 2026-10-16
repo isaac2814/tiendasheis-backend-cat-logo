@@ -20,8 +20,8 @@
 - **Repositorio**: `C:\Sheis catálogo\Backend catalogo`
 - **Frontend asociado**: `C:\Sheis catálogo\front` (NO TOCAR desde este proyecto)
 - **Puerto por defecto**: `8080`
-- **Versión de migración Flyway activa**: `V2`
-- **Próxima migración**: `V3`
+- **Versión de migración Flyway activa**: `V4`
+- **Próxima migración**: `V5`
 
 ---
 
@@ -34,7 +34,7 @@
 | Autenticación | JWT HS256 local (OAuth2 Resource Server) |
 | ORM | Hibernate ORM 7 + Spring Data JPA |
 | Base de Datos | PostgreSQL 15+ (producción) / H2 en memoria (tests) |
-| Migraciones | Flyway (última: V2) |
+| Migraciones | Flyway (última: V4) |
 | Build | Apache Maven 3.9+ (wrapper incluido) |
 | Boilerplate | Project Lombok (`@Getter`, `@Setter`, `@Slf4j` — constructores manuales por Java 25) |
 | Caché | Caffeine (10 min TTL, máx 100 entradas) |
@@ -92,7 +92,7 @@ C:\Sheis catálogo\Backend catalogo\
     ├── main/java/com/sheis/catalogo/
     │   ├── CatalogoApplication.java
     │   ├── config/
-    │   │   ├── AppProperties.java      # Propiedades app.cors, app.jwt, app.admin
+    │   │   ├── AppProperties.java      # Propiedades app.cors, app.jwt, app.admin, app.proxy
     │   │   ├── DataInitializer.java     # Crea admin inicial si tabla vacía
     │   │   └── OpenApiConfig.java       # Configuración Swagger/OpenAPI
     │   ├── domain/
@@ -144,15 +144,20 @@ C:\Sheis catálogo\Backend catalogo\
     │
     ├── main/resources/
     │   ├── application.yml
+    │   ├── application-prod.yml          # Perfil prod: desactiva Swagger/OpenAPI
     │   └── db/migration/
-    │       ├── V1__catalogo_inicial.sql   # Esquema + datos iniciales
-    │       └── V2__admin_usuarios.sql     # Tabla admin_usuarios
+    │       ├── V1__catalogo_inicial.sql      # Esquema + datos iniciales
+    │       ├── V2__admin_usuarios.sql        # Tabla admin_usuarios
+    │       ├── V3__servicio_imagenes.sql     # Imágenes/logos por servicio (bytea)
+    │       └── V4__metodo_pago_imagenes.sql  # Imágenes por método de pago (bytea)
     │
     └── test/java/com/sheis/catalogo/
         ├── CatalogoApplicationTests.java
         ├── security/SecurityAndAdminTest.java
         ├── service/PricingServiceTest.java
-        └── web/CatalogoPublicoControllerTest.java
+        ├── web/CatalogoPublicoControllerTest.java
+        ├── web/ServicioImagenIntegrationTest.java
+        └── web/MetodoPagoImagenIntegrationTest.java
 ```
 
 ---
@@ -170,6 +175,8 @@ C:\Sheis catálogo\Backend catalogo\
 |:--|:--|:--|
 | V1 | `catalogo_inicial` — esquema completo + datos seed | ✅ Aplicada |
 | V2 | `admin_usuarios` — tabla de administradores | ✅ Aplicada |
+| V3 | `servicio_imagenes` — imágenes de servicios (`bytea`, PK `servicio_id` → `servicios`, `ON DELETE CASCADE`) | ✅ Aplicada |
+| V4 | `metodo_pago_imagenes` — imágenes de métodos de pago (`bytea`, PK `metodo_pago_id` → `metodos_pago`, `ON DELETE CASCADE`) | ✅ Aplicada |
 
 ### Entidades y relaciones
 
@@ -254,16 +261,23 @@ Servicio → Modalidad (SkuCategoria) → Tarifa (paquete cerrado)
 
 ## 8. Pruebas Automatizadas
 
-### Suite de tests (19/19 ✅)
+### Suite de tests (30/30 ✅)
 
 | Clase | Tests | Cobertura |
 |:--|:--|:--|
 | `PricingServiceTest` | Unitarios | Cálculo de precios, descuentos progresivos, combos |
-| `CatalogoPublicoControllerTest` | Contrato API | Formato JSON público, estructura de respuesta |
-| `SecurityAndAdminTest` | Integración | Auth 401/403/200, login válido/inválido, rate limiting |
+| `CatalogoPublicoControllerTest` | Contrato API | Formato JSON público, estructura, `ETag`/`Cache-Control` y 304 condicional |
+| `ServicioImagenIntegrationTest` | Integración | Subir/borrar/consultar imagen de servicio, 401/404/400, cascada |
+| `MetodoPagoImagenIntegrationTest` | Integración | Subir/borrar/consultar imagen de método de pago, 401/404/400, cascada |
+| `SecurityAndAdminTest` | Integración | Auth 401/403/200, login válido/inválido, rate limiting (incl. no-bypass por `X-Forwarded-For`) |
+| `Plan Estimation` y `Planes Validation` | Integración | Estimación/validación de planes |
 | `CatalogoApplicationTests` | Contexto | Carga del contexto Spring |
 
-**Resultado**: `Tests run: 19, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS`
+**Resultado**: `Tests run: 30, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS`
+
+**Nota**: los tests usan H2 con `ddl-auto: create-drop` y **Flyway deshabilitado**, por lo que el esquema lo
+genera Hibernate desde las entidades y **no hay datos seed**; los tests de integración de imagen crean el
+`Servicio`/`MetodoPago` que necesitan en `@BeforeEach` (no asumir que `nequi`/`nc` existan).
 
 ---
 
@@ -299,6 +313,45 @@ Servicio → Modalidad (SkuCategoria) → Tarifa (paquete cerrado)
 **Motivo:** 2 perfiles puede tener descuento respecto a 2× precio unitario.
 **Impacto:** `PricingService`, DTOs de tarifas, catálogo público.
 
+### DEC-006 — Imágenes de servicio y de método de pago en BD (bytea)
+**Fecha:** 2026-10-16
+**Decisión:** Guardar las imágenes como `bytea` en PostgreSQL detrás de una interfaz de almacén
+(`ImagenServicioStore`/`ImagenMetodoPagoStore`, impl. `Postgres*Store`), tabla 1:1 con la entidad
+(`servicio_imagenes` V3, `metodo_pago_imagenes` V4, ambas `ON DELETE CASCADE`). Validación por magic bytes
+(PNG/JPEG/WebP) con `ImageValidator` y límite **512 KB** tras subir.
+**Endpoints:** `PUT/DELETE /api/admin/{servicios/{codigo}|metodos-pago/{id}}/imagen` (multipart, rol ADMIN) y
+`GET /api/public/{servicios/{codigo}|metodos-pago/{id}}/imagen` (`Cache-Control: immutable` + `nosniff`).
+El DTO (`ServicioPublicoDto`/`AdminServicioDto`, `MetodoPagoDto`/`AdminMetodoPagoDto`) incluye `imagenUrl`
+= `/api/public/.../imagen?v={epochMillis}` (o `null`), de modo que al cambiar la imagen cambia la URL.
+Toda subida/borrado **invalida la caché Caffeine** (`@CacheEvict("catalogo", allEntries = true)`).
+**Motivo:** El panel admin permite un logo por servicio y una imagen por método de pago (petición del usuario).
+
+### DEC-007 — Endurecimiento de seguridad para producción
+**Fecha:** 2026-10-16
+**Decisión:** (1) `AuthController` deja de confiar en `X-Forwarded-For` por defecto; solo lo usa si
+`app.proxy.trust-forwarded-headers=true` (var `TRUST_FORWARDED_HEADERS`), pensado únicamente para despliegues
+detrás de un proxy de confianza que sobrescribe la cabecera. Así el rate limiter se ancla a la IP real del
+socket y no puede eludirse falsificando la cabecera. (2) `AuthService` ejecuta siempre un `passwordEncoder.matches`
+contra un hash BCrypt dummy cuando el correo no existe, evitando enumeración de usuarios por *timing*.
+(3) `GlobalExceptionHandler` responde un mensaje fijo en 401 (no propaga el texto de la excepción de Security).
+(4) Nuevo perfil `prod` (`application-prod.yml`) que desactiva Swagger/OpenAPI (`springdoc.api-docs.enabled=false`,
+`springdoc.swagger-ui.enabled=false`) y el detalle del healthcheck.
+**Motivo:** Auditoría de seguridad previa al despliegue a producción.
+**Impacto:** `AuthController`, `AuthService`, `GlobalExceptionHandler`, `AppProperties` (nueva sección `app.proxy`),
+`application.yml`, `application-prod.yml`, `.env.example`. En producción: `SPRING_PROFILES_ACTIVE=prod`.
+
+### DEC-008 — Caché HTTP (ETag / Cache-Control) del catálogo público
+**Fecha:** 2026-10-16
+**Decisión:** `GET /api/public/catalogo` serializa la respuesta con el `JsonMapper` (Jackson 3) y añade
+`ETag` (MD5 del JSON) + `Cache-Control: max-age=30, must-revalidate, public`. Si el cliente envía
+`If-None-Match` coincidente, responde **304 Not Modified** sin cuerpo (revalidación barata). El front cachea
+persistentemente en `localStorage` y revalida en segundo plano, apoyándose en este ETag.
+**Nota técnica:** Spring Boot 4 usa **Jackson 3** (`tools.jackson.databind.json.JsonMapper`); el bean a inyectar
+es `JsonMapper`, **no** el `ObjectMapper` de `com.fasterxml` (Jackson 2 sigue en el classpath por springdoc, pero
+no hay bean de ese tipo). El controlador devuelve `byte[]` para evitar una doble serialización.
+**Motivo:** Mejorar la experiencia del cliente (carga instantánea + revalidación barata) sin sacrificar frescura.
+**Impacto:** `CatalogoPublicoController`, `CatalogoPublicoControllerTest`.
+
 ---
 
 ## 10. Problemas Conocidos y Trampas
@@ -329,6 +382,9 @@ Servicio → Modalidad (SkuCategoria) → Tarifa (paquete cerrado)
 | Swagger UI / OpenAPI interactivo | 2026-10-15 | Documentación y pruebas desde navegador |
 | Suite completa de tests (19/19) | 2026-10-15 | Unitarios + integración + contexto |
 | DataInitializer para admin inicial | 2026-10-15 | Creación automática del primer administrador |
+| Imágenes de servicio y de método de pago (V3/V4) | 2026-10-16 | `bytea` + endpoints admin/públicos (ver DEC-006) |
+| Endurecimiento de seguridad para producción | 2026-10-16 | XFF no confiable por defecto, anti-timing, 401 fijo, perfil `prod` sin Swagger (ver DEC-007) |
+| Caché HTTP del catálogo público (ETag/304) | 2026-10-16 | `GET /api/public/catalogo` con `ETag` + `Cache-Control` y 304 condicional (ver DEC-008) |
 
 ---
 
@@ -349,6 +405,12 @@ Servicio → Modalidad (SkuCategoria) → Tarifa (paquete cerrado)
 ---
 
 ## Historial Reciente de Cambios
+
+### 2026-10-16
+- **Caché HTTP del catálogo público (DEC-008)**: `GET /api/public/catalogo` con `ETag` + `Cache-Control` y 304 condicional (`JsonMapper` de Jackson 3).
+- **Imágenes de método de pago (V4)**: tabla `metodo_pago_imagenes`, endpoints admin/públicos, `imagenUrl` en DTOs (DEC-006).
+- **Auditoría de seguridad y endurecimiento para producción (DEC-007)**: rate limiter anclado a IP real (sin confiar en `X-Forwarded-For`), mitigación de enumeración por timing, 401 con mensaje fijo, perfil `prod` que desactiva Swagger/OpenAPI.
+- **Tests**: 29/29 `BUILD SUCCESS` (nuevo test de no-bypass del rate limiter vía `X-Forwarded-For`).
 
 ### 2026-10-15
 - **Proyecto creado desde cero**: Backend completo con Spring Boot 4.1.1, Java 25, PostgreSQL + Flyway, H2 para tests.

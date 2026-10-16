@@ -33,6 +33,7 @@ public class CatalogoAdminService {
     private final PricingService pricingService;
     private final StockProvider stockProvider;
     private final ImagenServicioStore imagenServicioStore;
+    private final ImagenMetodoPagoStore imagenMetodoPagoStore;
 
     public CatalogoAdminService(SkuCategoriaRepository skuCategoriaRepository,
                                 ServicioRepository servicioRepository,
@@ -44,7 +45,8 @@ public class CatalogoAdminService {
                                 CatalogoConfigRepository catalogoConfigRepository,
                                 PricingService pricingService,
                                 StockProvider stockProvider,
-                                ImagenServicioStore imagenServicioStore) {
+                                ImagenServicioStore imagenServicioStore,
+                                ImagenMetodoPagoStore imagenMetodoPagoStore) {
         this.skuCategoriaRepository = skuCategoriaRepository;
         this.servicioRepository = servicioRepository;
         this.tarifaRepository = tarifaRepository;
@@ -56,6 +58,7 @@ public class CatalogoAdminService {
         this.pricingService = pricingService;
         this.stockProvider = stockProvider;
         this.imagenServicioStore = imagenServicioStore;
+        this.imagenMetodoPagoStore = imagenMetodoPagoStore;
     }
 
     @Transactional(readOnly = true)
@@ -277,6 +280,20 @@ public class CatalogoAdminService {
         imagenServicioStore.eliminar(codigo);
     }
 
+    @Transactional
+    public ImagenMetodoPagoStore.ImagenGuardada guardarImagenMetodoPago(String id, byte[] bytes, String declaredContentType) {
+        if (!metodoPagoRepository.existsById(id)) {
+            throw new ResourceNotFoundException("El método de pago '" + id + "' no existe");
+        }
+        String detectedContentType = ImageValidator.validarYDetectarContentType(bytes, declaredContentType);
+        return imagenMetodoPagoStore.guardar(id, detectedContentType, bytes);
+    }
+
+    @Transactional
+    public void eliminarImagenMetodoPago(String id) {
+        imagenMetodoPagoStore.eliminar(id);
+    }
+
     // ==================== PLANES ====================
 
     @Transactional(readOnly = true)
@@ -475,18 +492,27 @@ public class CatalogoAdminService {
                 .map(h -> new HorarioDto(h.getDia(), h.getTexto()))
                 .toList();
 
+        Map<String, Instant> versionesImagenesMetodos = imagenMetodoPagoStore.obtenerVersionesPorId();
+
         List<AdminMetodoPagoDto> metodos = metodoPagoRepository.findAllByOrderByOrdenAsc().stream()
-                .map(m -> new AdminMetodoPagoDto(
-                        m.getId(),
-                        m.getNombre(),
-                        m.getInicial(),
-                        m.getColor(),
-                        m.getEtiquetaDato(),
-                        m.getDato(),
-                        m.getTitular(),
-                        m.getActivo(),
-                        m.getOrden()
-                ))
+                .map(m -> {
+                    Instant imgActualizada = versionesImagenesMetodos.get(m.getId());
+                    String imagenUrl = imgActualizada != null
+                            ? "/api/public/metodos-pago/" + m.getId() + "/imagen?v=" + imgActualizada.toEpochMilli()
+                            : null;
+                    return new AdminMetodoPagoDto(
+                            m.getId(),
+                            m.getNombre(),
+                            m.getInicial(),
+                            m.getColor(),
+                            m.getEtiquetaDato(),
+                            m.getDato(),
+                            m.getTitular(),
+                            m.getActivo(),
+                            m.getOrden(),
+                            imagenUrl
+                    );
+                })
                 .toList();
 
         return new AdminAjustesDto(whatsapp, sobreNosotros, horarios, metodos);

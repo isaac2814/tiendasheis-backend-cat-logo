@@ -1,0 +1,23 @@
+# Perfil de PRODUCCIÓN. Activar con: SPRING_PROFILES_ACTIVE=prod
+#
+# Endurece la configuración para exposición pública:
+#  - Desactiva Swagger / OpenAPI (no revelar la superficie de la API administrativa).
+#  - El healthcheck no expone detalles internos.
+#
+# El resto de valores sensibles (DB, JWT_SECRET, ADMIN_*, CORS_ALLOWED_ORIGINS,
+# TRUST_FORWARDED_HEADERS) se inyectan por variables de entorno.
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+management:
+  endpoint:
+    health:
+      show-details: never
+  endpoints:
+    web:
+      exposure:
+        include: health

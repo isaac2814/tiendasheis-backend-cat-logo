@@ -19,6 +19,12 @@ public class AuthService {
     private final TokenService tokenService;
     private final LoginRateLimiter rateLimiter;
 
+    /**
+     * Hash BCrypt de relleno: se compara siempre, incluso cuando el correo no existe, para que el
+     * tiempo de respuesta no revele si un usuario está registrado (evita enumeración por timing).
+     */
+    private final String dummyPasswordHash;
+
     public AuthService(AdminUsuarioRepository adminUsuarioRepository,
                        PasswordEncoder passwordEncoder,
                        TokenService tokenService,
@@ -27,6 +33,7 @@ public class AuthService {
         this.passwordEncoder = passwordEncoder;
         this.tokenService = tokenService;
         this.rateLimiter = rateLimiter;
+        this.dummyPasswordHash = passwordEncoder.encode("tiendasheis-timing-equalizer");
     }
 
     @Transactional(readOnly = true)
@@ -38,7 +45,10 @@ public class AuthService {
         AdminUsuario admin = adminUsuarioRepository.findByEmailIgnoreCaseAndActivoTrue(request.email())
                 .orElse(null);
 
-        if (admin == null || !passwordEncoder.matches(request.password(), admin.getPasswordHash())) {
+        String hash = admin != null ? admin.getPasswordHash() : dummyPasswordHash;
+        boolean coincide = passwordEncoder.matches(request.password(), hash);
+
+        if (admin == null || !coincide) {
             rateLimiter.registrarFallo(clientIp, request.email());
             throw new BadCredentialsException("Credenciales inválidas");
         }

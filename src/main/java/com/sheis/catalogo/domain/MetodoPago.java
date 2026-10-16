@@ -38,6 +38,9 @@ public class MetodoPago {
     @Column(nullable = false)
     private Integer orden = 0;
 
+    @OneToOne(mappedBy = "metodoPago", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private MetodoPagoImagen imagen;
+
     public MetodoPago() {
     }
 

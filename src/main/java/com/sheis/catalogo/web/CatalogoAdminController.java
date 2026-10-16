@@ -1,6 +1,7 @@
 package com.sheis.catalogo.web;
 
 import com.sheis.catalogo.service.CatalogoAdminService;
+import com.sheis.catalogo.service.ImagenMetodoPagoStore;
 import com.sheis.catalogo.service.ImagenServicioStore;
 import com.sheis.catalogo.web.dto.admin.*;
 import io.swagger.v3.oas.annotations.Operation;
@@ -100,6 +101,32 @@ public class CatalogoAdminController {
     @Operation(summary = "Eliminar imagen del servicio", description = "Elimina la imagen personalizada del servicio")
     public ResponseEntity<Void> eliminarImagen(@PathVariable String codigo) {
         catalogoAdminService.eliminarImagen(codigo);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping(value = "/metodos-pago/{id}/imagen", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Subir o actualizar imagen del método de pago", description = "Sube o actualiza la imagen PNG, JPG o WebP de un método de pago (máximo 512 KB)")
+    public ResponseEntity<SubirImagenResponse> subirImagenMetodoPago(
+            @PathVariable String id,
+            @RequestParam(value = "archivo", required = false) MultipartFile archivo,
+            @RequestParam(value = "file", required = false) MultipartFile fileFallback
+    ) throws IOException {
+        MultipartFile file = archivo != null ? archivo : fileFallback;
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("No se proporcionó ningún archivo de imagen");
+        }
+        ImagenMetodoPagoStore.ImagenGuardada guardada = catalogoAdminService.guardarImagenMetodoPago(
+                id,
+                file.getBytes(),
+                file.getContentType()
+        );
+        return ResponseEntity.ok(new SubirImagenResponse(guardada.imagenUrl()));
+    }
+
+    @DeleteMapping("/metodos-pago/{id}/imagen")
+    @Operation(summary = "Eliminar imagen del método de pago", description = "Elimina la imagen personalizada del método de pago")
+    public ResponseEntity<Void> eliminarImagenMetodoPago(@PathVariable String id) {
+        catalogoAdminService.eliminarImagenMetodoPago(id);
         return ResponseEntity.noContent().build();
     }
 

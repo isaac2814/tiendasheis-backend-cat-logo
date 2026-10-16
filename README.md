@@ -24,6 +24,8 @@ CREATE DATABASE tiendasheis;
 > **Nota sobre Migraciones:** No es necesario crear las tablas manualmente. Flyway ejecuta automáticamente las migraciones versionadas en `src/main/resources/db/migration/`:
 > - `V1__catalogo_inicial.sql`: Esquema del catálogo (servicios, sku_categorias, tarifas, combos, etc.) e inserción de datos iniciales.
 > - `V2__admin_usuarios.sql`: Tabla de usuarios administradores con credenciales seguras.
+> - `V3__servicio_imagenes.sql`: Imágenes/logos por servicio (almacenadas como `bytea`).
+> - `V4__metodo_pago_imagenes.sql`: Imágenes por método de pago (`bytea`).
 
 ### 2.2 Configuración de Variables de Entorno (`.env`)
 En la raíz de la carpeta `Backend catalogo/`, copia el archivo `.env.example` como `.env`:
@@ -53,6 +55,12 @@ JWT_TTL_HOURS=24
 # Administrador Inicial (creado automáticamente si la tabla está vacía)
 ADMIN_EMAIL=admin@tiendasheis.com
 ADMIN_PASSWORD=PasswordSeguro123!
+
+# Confiar en X-Forwarded-For (solo detrás de un proxy inverso de confianza). Por defecto: false
+TRUST_FORWARDED_HEADERS=false
+
+# Perfil de Spring. Usar "prod" en producción (desactiva Swagger/OpenAPI)
+SPRING_PROFILES_ACTIVE=prod
 ```
 
 ---
@@ -70,6 +78,28 @@ Para iniciar el backend en modo desarrollo:
 ```
 
 El servidor iniciará en `http://localhost:8080`.
+
+---
+
+## 3.1. Ejecución en Producción (endurecida)
+
+Antes de exponer el backend, configura estas variables de entorno:
+
+- `SPRING_PROFILES_ACTIVE=prod` — activa `application-prod.yml`, que **desactiva Swagger/OpenAPI**
+  (`/swagger-ui.html`, `/v3/api-docs`) y oculta el detalle del healthcheck.
+- `TRUST_FORWARDED_HEADERS=false` (por defecto) — el backend usa la **IP real del socket** y **no** confía en
+  `X-Forwarded-For`, para que nadie pueda falsificar su IP y eludir el límite de intentos de login. Ponlo en
+  `true` **solo** si está detrás de un proxy inverso de confianza (nginx/Traefik/balanceador) que sobrescriba
+  esa cabecera.
+- `CORS_ALLOWED_ORIGINS` con el dominio real del frontend (no `localhost`).
+
+```bash
+# Windows
+$env:SPRING_PROFILES_ACTIVE="prod"; .\mvnw.cmd spring-boot:run
+
+# Linux/macOS
+SPRING_PROFILES_ACTIVE=prod ./mvnw spring-boot:run
+```
 
 ---
 

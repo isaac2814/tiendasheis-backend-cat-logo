@@ -7,8 +7,8 @@ Este documento describe la especificación técnica completa y ejemplos de uso d
 ## 1. Convenciones y Autenticación
 
 - **Base URL Local**: `http://localhost:8080`
-- **Swagger UI Interactivo**: `http://localhost:8080/swagger-ui.html`
-- **OpenAPI JSON**: `http://localhost:8080/v3/api-docs`
+- **Swagger UI Interactivo**: `http://localhost:8080/swagger-ui.html` *(deshabilitado con el perfil `prod`)*
+- **OpenAPI JSON**: `http://localhost:8080/v3/api-docs` *(deshabilitado con el perfil `prod`)*
 - **Formato de datos**: `application/json; charset=UTF-8`
 - **Formato de errores**: RFC 9457 `ProblemDetail` (application/problem+json)
 
@@ -138,6 +138,15 @@ Retorna los servicios visibles con sus planes activos, precio base calculado, co
 #### Ejemplo de cURL:
 ```bash
 curl -X GET http://localhost:8080/api/public/catalogo
+```
+
+#### Caché HTTP:
+La respuesta incluye `ETag` (hash MD5 del JSON) y `Cache-Control: max-age=30, must-revalidate, public`.
+Si el cliente repite la petición con `If-None-Match` y el catálogo no cambió, el servidor responde
+**`304 Not Modified`** sin cuerpo (revalidación barata):
+```bash
+curl -X GET http://localhost:8080/api/public/catalogo \
+  -H 'If-None-Match: "42bcca426ab42c1fb77b5f0ba9d71daa"'
 ```
 
 ---
@@ -458,6 +467,32 @@ curl -X PUT http://localhost:8080/api/admin/metodos-pago \
 ```
 
 ---
+
+### 5.9.1 Imagen de un servicio
+Sube, elimina o consulta el logo de un servicio (PNG/JPEG/WebP, máx. 512 KB).
+
+- **Subir / reemplazar**: `PUT /api/admin/servicios/{codigo}/imagen` (multipart, campo `archivo`) → `200` con `{"imagenUrl": "..."}`; `400` si el archivo no es imagen válida o excede el tamaño; `404` si el servicio no existe; `401` sin token.
+- **Eliminar**: `DELETE /api/admin/servicios/{codigo}/imagen` → `204`.
+- **Consultar (público)**: `GET /api/public/servicios/{codigo}/imagen` → bytes con `Cache-Control: immutable`.
+
+```bash
+curl -X PUT http://localhost:8082/api/admin/servicios/nc/imagen \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "archivo=@logo.png;type=image/png"
+```
+
+### 5.9.2 Imagen de un método de pago
+Sube, elimina o consulta la imagen de un método de pago (PNG/JPEG/WebP, máx. 512 KB).
+
+- **Subir / reemplazar**: `PUT /api/admin/metodos-pago/{id}/imagen` (multipart, campo `archivo`) → `200` con `{"imagenUrl": "..."}`; `400` si el archivo no es imagen válida o excede el tamaño; `404` si el método no existe; `401` sin token.
+- **Eliminar**: `DELETE /api/admin/metodos-pago/{id}/imagen` → `204`.
+- **Consultar (público)**: `GET /api/public/metodos-pago/{id}/imagen` → bytes con `Cache-Control: immutable`.
+
+```bash
+curl -X PUT http://localhost:8082/api/admin/metodos-pago/nequi/imagen \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "archivo=@nequi.png;type=image/png"
+```
 
 ### 5.10 Guardar Ajustes Generales y Descuentos
 Actualiza teléfono de WhatsApp, textos informativos, escala de descuentos por volumen y horarios.

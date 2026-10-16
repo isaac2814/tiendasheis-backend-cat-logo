@@ -25,6 +25,7 @@ public class CatalogoPublicoService {
     private final PricingService pricingService;
     private final StockProvider stockProvider;
     private final ImagenServicioStore imagenServicioStore;
+    private final ImagenMetodoPagoStore imagenMetodoPagoStore;
 
     public CatalogoPublicoService(SkuCategoriaRepository skuCategoriaRepository,
                                   ComboRepository comboRepository,
@@ -34,7 +35,8 @@ public class CatalogoPublicoService {
                                   CatalogoConfigRepository catalogoConfigRepository,
                                   PricingService pricingService,
                                   StockProvider stockProvider,
-                                  ImagenServicioStore imagenServicioStore) {
+                                  ImagenServicioStore imagenServicioStore,
+                                  ImagenMetodoPagoStore imagenMetodoPagoStore) {
         this.skuCategoriaRepository = skuCategoriaRepository;
         this.comboRepository = comboRepository;
         this.descuentoComboRepository = descuentoComboRepository;
@@ -44,6 +46,7 @@ public class CatalogoPublicoService {
         this.pricingService = pricingService;
         this.stockProvider = stockProvider;
         this.imagenServicioStore = imagenServicioStore;
+        this.imagenMetodoPagoStore = imagenMetodoPagoStore;
     }
 
     @Transactional(readOnly = true)
@@ -163,16 +166,24 @@ public class CatalogoPublicoService {
         }
 
         // 4. Métodos de pago activos
+        Map<String, Instant> versionesImagenesMetodos = imagenMetodoPagoStore.obtenerVersionesPorId();
         List<MetodoPagoDto> metodosPagoDtos = metodoPagoRepository.findByActivoTrueOrderByOrdenAsc().stream()
-                .map(m -> new MetodoPagoDto(
-                        m.getId(),
-                        m.getNombre(),
-                        m.getInicial(),
-                        m.getColor(),
-                        m.getEtiquetaDato(),
-                        m.getDato(),
-                        m.getTitular()
-                ))
+                .map(m -> {
+                    Instant imgActualizada = versionesImagenesMetodos.get(m.getId());
+                    String imagenUrl = imgActualizada != null
+                            ? "/api/public/metodos-pago/" + m.getId() + "/imagen?v=" + imgActualizada.toEpochMilli()
+                            : null;
+                    return new MetodoPagoDto(
+                            m.getId(),
+                            m.getNombre(),
+                            m.getInicial(),
+                            m.getColor(),
+                            m.getEtiquetaDato(),
+                            m.getDato(),
+                            m.getTitular(),
+                            imagenUrl
+                    );
+                })
                 .toList();
 
         // 5. Horario
@@ -203,5 +214,10 @@ public class CatalogoPublicoService {
     @Transactional(readOnly = true)
     public Optional<ImagenServicioStore.ImagenData> obtenerImagen(String codigo) {
         return imagenServicioStore.obtener(codigo);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<ImagenMetodoPagoStore.ImagenData> obtenerImagenMetodoPago(String id) {
+        return imagenMetodoPagoStore.obtener(id);
     }
 }
