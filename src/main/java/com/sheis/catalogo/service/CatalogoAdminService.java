@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.text.Normalizer;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -31,6 +32,7 @@ public class CatalogoAdminService {
     private final CatalogoConfigRepository catalogoConfigRepository;
     private final PricingService pricingService;
     private final StockProvider stockProvider;
+    private final ImagenServicioStore imagenServicioStore;
 
     public CatalogoAdminService(SkuCategoriaRepository skuCategoriaRepository,
                                 ServicioRepository servicioRepository,
@@ -41,7 +43,8 @@ public class CatalogoAdminService {
                                 HorarioRepository horarioRepository,
                                 CatalogoConfigRepository catalogoConfigRepository,
                                 PricingService pricingService,
-                                StockProvider stockProvider) {
+                                StockProvider stockProvider,
+                                ImagenServicioStore imagenServicioStore) {
         this.skuCategoriaRepository = skuCategoriaRepository;
         this.servicioRepository = servicioRepository;
         this.tarifaRepository = tarifaRepository;
@@ -52,6 +55,7 @@ public class CatalogoAdminService {
         this.catalogoConfigRepository = catalogoConfigRepository;
         this.pricingService = pricingService;
         this.stockProvider = stockProvider;
+        this.imagenServicioStore = imagenServicioStore;
     }
 
     @Transactional(readOnly = true)
@@ -61,6 +65,7 @@ public class CatalogoAdminService {
 
         // Mapa de precios base para combos
         List<SkuCategoria> todos = skuCategoriaRepository.findAllWithTarifas();
+        Map<String, Instant> versionesImagenes = imagenServicioStore.obtenerVersionesPorCodigo();
         Map<String, Long> preciosBaseMap = new HashMap<>();
         Map<String, Boolean> agotadoMap = new HashMap<>();
         List<AdminServicioDto> serviciosDtos = new ArrayList<>();
@@ -81,6 +86,11 @@ public class CatalogoAdminService {
                     .map(t -> new AdminPlanDto(t.getDias(), t.getCantidadPerfiles(), t.getPrecio(), t.getActivo()))
                     .toList();
 
+            Instant imgActualizada = versionesImagenes.get(s.getCodigo());
+            String imagenUrl = imgActualizada != null
+                    ? "/api/public/servicios/" + s.getCodigo() + "/imagen?v=" + imgActualizada.toEpochMilli()
+                    : null;
+
             serviciosDtos.add(new AdminServicioDto(
                     s.getCodigo(),
                     s.getNombre(),
@@ -88,6 +98,7 @@ public class CatalogoAdminService {
                     s.getInicial(),
                     s.getColor(),
                     s.getLogoUrl(),
+                    imagenUrl,
                     s.getEtiqueta(),
                     s.getDescripcion(),
                     s.getIncluye(),
@@ -250,6 +261,20 @@ public class CatalogoAdminService {
                 "Servicio '" + codigo + "' eliminado exitosamente",
                 combosAfectados
         );
+    }
+
+    @Transactional
+    public ImagenServicioStore.ImagenGuardada guardarImagen(String codigo, byte[] bytes, String declaredContentType) {
+        if (!skuCategoriaRepository.existsByCodigo(codigo)) {
+            throw new ResourceNotFoundException("El servicio '" + codigo + "' no existe");
+        }
+        String detectedContentType = ImageValidator.validarYDetectarContentType(bytes, declaredContentType);
+        return imagenServicioStore.guardar(codigo, detectedContentType, bytes);
+    }
+
+    @Transactional
+    public void eliminarImagen(String codigo) {
+        imagenServicioStore.eliminar(codigo);
     }
 
     // ==================== PLANES ====================
@@ -532,6 +557,13 @@ public class CatalogoAdminService {
                 .map(t -> new AdminPlanDto(t.getDias(), t.getCantidadPerfiles(), t.getPrecio(), t.getActivo()))
                 .toList();
 
+        Instant imgActualizada = imagenServicioStore.obtener(s.getCodigo())
+                .map(ImagenServicioStore.ImagenData::actualizadoEn)
+                .orElse(null);
+        String imagenUrl = imgActualizada != null
+                ? "/api/public/servicios/" + s.getCodigo() + "/imagen?v=" + imgActualizada.toEpochMilli()
+                : null;
+
         return new AdminServicioDto(
                 s.getCodigo(),
                 s.getNombre(),
@@ -539,6 +571,7 @@ public class CatalogoAdminService {
                 s.getInicial(),
                 s.getColor(),
                 s.getLogoUrl(),
+                imagenUrl,
                 s.getEtiqueta(),
                 s.getDescripcion(),
                 s.getIncluye(),

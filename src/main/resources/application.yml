@@ -6,6 +6,10 @@ spring:
     import: optional:file:.env[.properties]
   application:
     name: catalogo
+  servlet:
+    multipart:
+      max-file-size: 1MB
+      max-request-size: 1MB
 
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/sheis_catalogo}

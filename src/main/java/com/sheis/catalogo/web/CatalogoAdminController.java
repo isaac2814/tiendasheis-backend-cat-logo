@@ -1,6 +1,7 @@
 package com.sheis.catalogo.web;
 
 import com.sheis.catalogo.service.CatalogoAdminService;
+import com.sheis.catalogo.service.ImagenServicioStore;
 import com.sheis.catalogo.web.dto.admin.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -11,6 +12,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.sheis.catalogo.exception.BadRequestException;
+import org.springframework.http.MediaType;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -69,6 +75,32 @@ public class CatalogoAdminController {
     @Operation(summary = "Eliminar servicio", description = "Elimina un servicio y ajusta los combos que lo contenían")
     public ResponseEntity<EliminarServicioResponse> eliminarServicio(@PathVariable String codigo) {
         return ResponseEntity.ok(catalogoAdminService.eliminarServicio(codigo));
+    }
+
+    @PutMapping(value = "/servicios/{codigo}/imagen", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Subir o actualizar imagen del servicio", description = "Sube o actualiza la imagen PNG, JPG o WebP de un servicio (máximo 512 KB)")
+    public ResponseEntity<SubirImagenResponse> subirImagen(
+            @PathVariable String codigo,
+            @RequestParam(value = "archivo", required = false) MultipartFile archivo,
+            @RequestParam(value = "file", required = false) MultipartFile fileFallback
+    ) throws IOException {
+        MultipartFile file = archivo != null ? archivo : fileFallback;
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("No se proporcionó ningún archivo de imagen");
+        }
+        ImagenServicioStore.ImagenGuardada guardada = catalogoAdminService.guardarImagen(
+                codigo,
+                file.getBytes(),
+                file.getContentType()
+        );
+        return ResponseEntity.ok(new SubirImagenResponse(guardada.imagenUrl()));
+    }
+
+    @DeleteMapping("/servicios/{codigo}/imagen")
+    @Operation(summary = "Eliminar imagen del servicio", description = "Elimina la imagen personalizada del servicio")
+    public ResponseEntity<Void> eliminarImagen(@PathVariable String codigo) {
+        catalogoAdminService.eliminarImagen(codigo);
+        return ResponseEntity.noContent().build();
     }
 
     // ==================== PLANES ====================

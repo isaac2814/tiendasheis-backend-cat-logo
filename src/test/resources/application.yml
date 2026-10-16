@@ -1,6 +1,10 @@
 spring:
   application:
     name: catalogo-test
+  servlet:
+    multipart:
+      max-file-size: 1MB
+      max-request-size: 1MB
 
   datasource:
     url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH

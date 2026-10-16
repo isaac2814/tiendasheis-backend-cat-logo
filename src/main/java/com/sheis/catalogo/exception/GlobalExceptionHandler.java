@@ -102,6 +102,17 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ProblemDetail handleMaxUploadSizeExceeded(org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.PAYLOAD_TOO_LARGE,
+                "El tamaño del archivo excede el límite máximo permitido"
+        );
+        problem.setTitle("Archivo demasiado grande");
+        problem.setType(URI.create("urn:problem:payload-too-large"));
+        return problem;
+    }
+
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleGeneralException(Exception ex) {
         log.error("Error inesperado en el servidor", ex);

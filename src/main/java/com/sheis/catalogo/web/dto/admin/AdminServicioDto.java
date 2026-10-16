@@ -9,6 +9,7 @@ public record AdminServicioDto(
         String inicial,
         String color,
         String logoUrl,
+        String imagenUrl,
         String etiqueta,
         String descripcion,
         List<String> incluye,
@@ -20,4 +21,12 @@ public record AdminServicioDto(
         boolean agotado,
         Long precioBase,
         List<AdminPlanDto> planes
-) {}
+) {
+    public AdminServicioDto(String id, String nombre, String modalidad, String inicial, String color,
+                            String logoUrl, String etiqueta, String descripcion, List<String> incluye,
+                            List<String> recomendaciones, Boolean visible, Integer orden,
+                            Integer stockManual, Integer stock, boolean agotado, Long precioBase,
+                            List<AdminPlanDto> planes) {
+        this(id, nombre, modalidad, inicial, color, logoUrl, null, etiqueta, descripcion, incluye, recomendaciones, visible, orden, stockManual, stock, agotado, precioBase, planes);
+    }
+}

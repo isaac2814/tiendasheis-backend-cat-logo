@@ -9,6 +9,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -23,6 +24,7 @@ public class CatalogoPublicoService {
     private final CatalogoConfigRepository catalogoConfigRepository;
     private final PricingService pricingService;
     private final StockProvider stockProvider;
+    private final ImagenServicioStore imagenServicioStore;
 
     public CatalogoPublicoService(SkuCategoriaRepository skuCategoriaRepository,
                                   ComboRepository comboRepository,
@@ -31,7 +33,8 @@ public class CatalogoPublicoService {
                                   HorarioRepository horarioRepository,
                                   CatalogoConfigRepository catalogoConfigRepository,
                                   PricingService pricingService,
-                                  StockProvider stockProvider) {
+                                  StockProvider stockProvider,
+                                  ImagenServicioStore imagenServicioStore) {
         this.skuCategoriaRepository = skuCategoriaRepository;
         this.comboRepository = comboRepository;
         this.descuentoComboRepository = descuentoComboRepository;
@@ -40,6 +43,7 @@ public class CatalogoPublicoService {
         this.catalogoConfigRepository = catalogoConfigRepository;
         this.pricingService = pricingService;
         this.stockProvider = stockProvider;
+        this.imagenServicioStore = imagenServicioStore;
     }
 
     @Transactional(readOnly = true)
@@ -73,6 +77,7 @@ public class CatalogoPublicoService {
 
         // 2. Servicios visibles con al menos un plan activo
         List<SkuCategoria> visibles = skuCategoriaRepository.findVisibleWithTarifas();
+        Map<String, Instant> versionesImagenes = imagenServicioStore.obtenerVersionesPorCodigo();
         Map<String, Long> preciosBaseMap = new HashMap<>();
         Map<String, Boolean> agotadoMap = new HashMap<>();
         List<ServicioPublicoDto> serviciosDtos = new ArrayList<>();
@@ -103,12 +108,18 @@ public class CatalogoPublicoService {
                     .map(t -> new PlanDto(t.getDias(), t.getCantidadPerfiles(), t.getPrecio().longValue()))
                     .toList();
 
+            Instant imgActualizada = versionesImagenes.get(s.getCodigo());
+            String imagenUrl = imgActualizada != null
+                    ? "/api/public/servicios/" + s.getCodigo() + "/imagen?v=" + imgActualizada.toEpochMilli()
+                    : null;
+
             serviciosDtos.add(new ServicioPublicoDto(
                     s.getCodigo(),
                     s.getNombre(),
                     s.getInicial(),
                     s.getColor(),
                     s.getLogoUrl(),
+                    imagenUrl,
                     s.getEtiqueta() != null ? s.getEtiqueta() : "",
                     s.getDescripcion() != null ? s.getDescripcion() : "",
                     s.getIncluye() != null ? s.getIncluye() : List.of(),
@@ -187,5 +198,10 @@ public class CatalogoPublicoService {
                 whatsapp,
                 sobreNosotros
         );
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<ImagenServicioStore.ImagenData> obtenerImagen(String codigo) {
+        return imagenServicioStore.obtener(codigo);
     }
 }
