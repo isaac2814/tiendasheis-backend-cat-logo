@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: catalogo-test
+
+  datasource:
+    url: jdbc:h2:mem:testdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+
+  flyway:
+    enabled: false
+
+  cache:
+    type: none
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+app:
+  cors:
+    allowed-origins: http://localhost:5173
+  jwt:
+    secret: super_secret_jwt_key_at_least_32_characters_123456
+    ttl-hours: 8
+  admin:
+    email: admin@test.com
+    password: AdminPasswordTest123!
