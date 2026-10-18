@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -15,10 +16,27 @@ import java.util.List;
 @ConfigurationProperties(prefix = "app")
 public class AppProperties {
 
+    private static final int JWT_SECRET_MIN_LENGTH = 32;
+    private static final int ADMIN_PASSWORD_MIN_LENGTH = 10;
+
+    /**
+     * Valores de secreto de ejemplo/desarrollo que JAMÁS deben usarse en un despliegue real.
+     * Si el secreto configurado coincide con alguno, la aplicación se niega a arrancar.
+     */
+    private static final Set<String> JWT_SECRETS_PROHIBIDOS = Set.of(
+            "super_secret_jwt_key_at_least_32_characters_123456",
+            "PEGA_AQUI_UN_SECRETO_ALEATORIO_DE_32_CARACTERES_O_MAS",
+            "changeme",
+            "change_me",
+            "secret",
+            "secretsecretsecretsecretsecretsecret"
+    );
+
     private Cors cors = new Cors();
     private Jwt jwt = new Jwt();
     private Admin admin = new Admin();
     private Proxy proxy = new Proxy();
+    private Security security = new Security();
 
     @Getter
     @Setter
@@ -40,7 +58,8 @@ public class AppProperties {
     @Setter
     public static class Jwt {
         private String secret = "";
-        private int ttlHours = 8;
+        /** Caducidad del token en minutos. Configurable con JWT_EXPIRATION_MINUTES (por defecto 8 h). */
+        private long ttlMinutes = 480;
     }
 
     @Getter
@@ -62,10 +81,53 @@ public class AppProperties {
         private boolean trustForwardedHeaders = false;
     }
 
+    @Getter
+    @Setter
+    public static class Security {
+        /**
+         * Permite el acceso sin token a Swagger/OpenAPI. Útil en desarrollo; en producción
+         * se desactiva (springdoc deshabilitado + perfil prod con este flag en {@code false}).
+         */
+        private boolean permitSwagger = true;
+    }
+
     @PostConstruct
     public void validate() {
-        if (jwt.getSecret() == null || jwt.getSecret().trim().length() < 32) {
-            throw new IllegalStateException("app.jwt.secret debe configurarse con al menos 32 caracteres (variable de entorno JWT_SECRET)");
+        validarJwt();
+        validarAdmin();
+    }
+
+    private void validarJwt() {
+        String secret = jwt.getSecret() == null ? "" : jwt.getSecret().trim();
+        if (secret.isEmpty()) {
+            throw new IllegalStateException(
+                    "Falta JWT_SECRET: configura un secreto aleatorio de al menos "
+                            + JWT_SECRET_MIN_LENGTH + " caracteres.");
+        }
+        if (secret.length() < JWT_SECRET_MIN_LENGTH) {
+            throw new IllegalStateException(
+                    "JWT_SECRET es demasiado corto: debe tener al menos " + JWT_SECRET_MIN_LENGTH
+                            + " caracteres (tiene " + secret.length() + ").");
+        }
+        if (JWT_SECRETS_PROHIBIDOS.contains(secret)) {
+            throw new IllegalStateException(
+                    "JWT_SECRET usa un valor de ejemplo/desarrollo conocido. Genera un secreto "
+                            + "aleatorio propio (por ejemplo: openssl rand -base64 48).");
+        }
+    }
+
+    private void validarAdmin() {
+        String email = admin.getEmail() == null ? "" : admin.getEmail().trim();
+        String password = admin.getPassword() == null ? "" : admin.getPassword();
+        if (email.isEmpty() || password.isEmpty()) {
+            throw new IllegalStateException(
+                    "Faltan ADMIN_EMAIL y/o ADMIN_PASSWORD: se requieren para crear el "
+                            + "administrador inicial cuando la tabla de usuarios esté vacía.");
+        }
+        if (password.length() < ADMIN_PASSWORD_MIN_LENGTH) {
+            throw new IllegalStateException(
+                    "ADMIN_PASSWORD es demasiado débil: debe tener al menos "
+                            + ADMIN_PASSWORD_MIN_LENGTH + " caracteres.");
         }
     }
 }

@@ -20,8 +20,8 @@
 - **Repositorio**: `C:\Sheis catálogo\Backend catalogo`
 - **Frontend asociado**: `C:\Sheis catálogo\front` (NO TOCAR desde este proyecto)
 - **Puerto por defecto**: `8080`
-- **Versión de migración Flyway activa**: `V4`
-- **Próxima migración**: `V5`
+- **Versión de migración Flyway activa**: `V5`
+- **Próxima migración**: `V6`
 
 ---
 
@@ -34,13 +34,13 @@
 | Autenticación | JWT HS256 local (OAuth2 Resource Server) |
 | ORM | Hibernate ORM 7 + Spring Data JPA |
 | Base de Datos | PostgreSQL 15+ (producción) / H2 en memoria (tests) |
-| Migraciones | Flyway (última: V4) |
+| Migraciones | Flyway (última: V5) |
 | Build | Apache Maven 3.9+ (wrapper incluido) |
 | Boilerplate | Project Lombok (`@Getter`, `@Setter`, `@Slf4j` — constructores manuales por Java 25) |
 | Caché | Caffeine (10 min TTL, máx 100 entradas) |
 | Documentación API | Springdoc OpenAPI 3.1.1 / Swagger UI |
 | Seguridad de contraseñas | BCrypt |
-| Rate Limiting | Caffeine (login: 5 intentos / 15 min por IP+email) |
+| Rate Limiting | Caffeine (login: 5 fallos / 60 s por IP y también por email) |
 
 ---
 
@@ -352,6 +352,46 @@ no hay bean de ese tipo). El controlador devuelve `byte[]` para evitar una doble
 **Motivo:** Mejorar la experiencia del cliente (carga instantánea + revalidación barata) sin sacrificar frescura.
 **Impacto:** `CatalogoPublicoController`, `CatalogoPublicoControllerTest`.
 
+### DEC-009 — RLS de Supabase (V5) y lock de Flyway sobre su tabla de historial
+**Fecha:** 2026-10-16
+**Decisión:** Migración `V5__rls_supabase.sql` que ejecuta `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`
+sobre las 13 tablas del esquema `public` (incluida `flyway_schema_history`) **sin crear políticas**, y
+revoca `ALL` a los roles `anon`/`authenticated` **solo si existen** (idempotente y seguro en H2/local).
+El dueño de las tablas (usuario JDBC del backend) mantiene acceso pleno (no se activa `FORCE ROW LEVEL SECURITY`).
+**Trampa crítica (resuelta):** con el **lock transaccional por defecto** de Flyway sobre PostgreSQL, la
+propia migración mantiene bloqueada `flyway_schema_history` y el `ALTER` sobre esa tabla espera un lock
+hasta agotar el `statement_timeout` de Supabase (120 s → SQLState 57014). Fuera de Flyway el `ALTER` es
+instantáneo (~100 ms). **Solución:** en el perfil `prod`, `spring.flyway.postgresql.transactional-lock: false`
+(lock a nivel de sesión) → V5 se aplica en <1 s. Verificado: Flyway v5 `success=true` y `relrowsecurity=true`
+en las 13 tablas.
+**Motivo:** Supabase expone el esquema `public` por PostgREST con la clave `anon`; sin RLS, cualquiera con
+esa clave pública podría leer/escribir datos del negocio. El backend no usa PostgREST (JDBC directo).
+**Impacto:** `V5__rls_supabase.sql`, `application-prod.yml`.
+
+### DEC-010 — Endurecimiento y empaquetado para producción
+**Fecha:** 2026-10-16
+**Decisión:** (1) `AppProperties` valida **fail-fast** al arrancar: `JWT_SECRET` ≥ 32 caracteres y distinto de
+valores de ejemplo; `ADMIN_EMAIL`/`ADMIN_PASSWORD` presentes y contraseña ≥ 10. (2) `application-prod.yml`
+endurecido: puerto `${PORT:8082}`, `forward-headers-strategy: framework`, DB/CORS/JWT **solo por variables de
+entorno sin default**, Hikari 5/1, `ddl-auto: validate`, Flyway on, Swagger desactivado, errores sin detalle,
+logs INFO sin SQL, compresión JSON. (3) Cabeceras de seguridad: `Referrer-Policy: no-referrer` y
+`Permissions-Policy` restrictivo (además de `nosniff`/`DENY` ya por defecto). (4) `LoginRateLimiter` reescrito a
+**5 fallos / 60 s por IP y también por email** con mensaje genérico (no revela qué cuenta se bloqueó).
+(5) `GlobalExceptionHandler` mapea 405 y 404 en vez de 500 genérico. (6) `Cache-Control` público pasa de
+`max-age=30` a `max-age=60`. (7) `Dockerfile` multi-etapa (`maven:3.9-eclipse-temurin-25` →
+`eclipse-temurin:25-jre-alpine`), usuario no root, `EXPOSE 8080`, `ENV PORT=8080`, `HEALTHCHECK` a
+`/actuator/health`; plus `.dockerignore` y `DEPLOY.md`.
+**Desviación reportada:** el requisito pedía CORS con métodos `GET, POST, PUT, DELETE, OPTIONS`, pero el panel
+usa **PATCH** (`/visible`, `/stock`); se mantuvo PATCH para no romper funcionalidad.
+**Motivo:** Dejar el backend listo para despliegue real (config por entorno, seguridad, empaquetado).
+**Impacto:** `AppProperties`, `application.yml`, `application-prod.yml`, `SecurityConfig`, `LoginRateLimiter`,
+`RateLimitException`, `AuthService`, `CatalogoPublicoController`, `GlobalExceptionHandler`, `DataInitializer`,
+`Dockerfile`, `.dockerignore`, `DEPLOY.md`, `.env.example`, `.gitignore`.
+**Verificado en local (perfil `prod` contra Supabase):** `/actuator/health` 200; `GET /api/public/catalogo`
+200 con `ETag` + `Cache-Control: max-age=60`; `/api/admin/**` 401 sin token y 200 con token ADMIN; Swagger
+(`/v3/api-docs`, `/swagger-ui`) no accesible (401 anón / 403 con sesión); 6.º login fallido → 429.
+Tests backend **38/38 `BUILD SUCCESS`**.
+
 ---
 
 ## 10. Problemas Conocidos y Trampas
@@ -385,6 +425,8 @@ no hay bean de ese tipo). El controlador devuelve `byte[]` para evitar una doble
 | Imágenes de servicio y de método de pago (V3/V4) | 2026-10-16 | `bytea` + endpoints admin/públicos (ver DEC-006) |
 | Endurecimiento de seguridad para producción | 2026-10-16 | XFF no confiable por defecto, anti-timing, 401 fijo, perfil `prod` sin Swagger (ver DEC-007) |
 | Caché HTTP del catálogo público (ETag/304) | 2026-10-16 | `GET /api/public/catalogo` con `ETag` + `Cache-Control` y 304 condicional (ver DEC-008) |
+| RLS de Supabase (V5) en las 13 tablas | 2026-10-16 | Sin políticas; dueño JDBC exento; `transactional-lock=false` en prod (ver DEC-009) |
+| Endurecimiento y empaquetado para producción | 2026-10-16 | Fail-fast secretos, perfil `prod`, rate limit 5/min, Dockerfile no-root, `DEPLOY.md` (ver DEC-010) |
 
 ---
 
@@ -407,6 +449,7 @@ no hay bean de ese tipo). El controlador devuelve `byte[]` para evitar una doble
 ## Historial Reciente de Cambios
 
 ### 2026-10-16
+- **Listo para producción (DEC-009/DEC-010)**: migración RLS `V5` aplicada en Supabase (`transactional-lock=false` en `prod`), fail-fast de secretos, perfil `prod` endurecido, rate limit 5/min, `Dockerfile` multi-etapa no-root, `DEPLOY.md`. Verificado en local con perfil `prod`: health 200, catálogo ETag 60 s, admin 401, Swagger inaccesible, 6.º login → 429. Tests **38/38**.
 - **Caché HTTP del catálogo público (DEC-008)**: `GET /api/public/catalogo` con `ETag` + `Cache-Control` y 304 condicional (`JsonMapper` de Jackson 3).
 - **Imágenes de método de pago (V4)**: tabla `metodo_pago_imagenes`, endpoints admin/públicos, `imagenUrl` en DTOs (DEC-006).
 - **Auditoría de seguridad y endurecimiento para producción (DEC-007)**: rate limiter anclado a IP real (sin confiar en `X-Forwarded-For`), mitigación de enumeración por timing, 401 con mensaje fijo, perfil `prod` que desactiva Swagger/OpenAPI.

@@ -26,7 +26,7 @@ public class TokenService {
 
     public LoginResponse generarToken(String email) {
         Instant ahora = Instant.now();
-        long ttlSegundos = Duration.ofHours(appProperties.getJwt().getTtlHours()).toSeconds();
+        long ttlSegundos = Duration.ofMinutes(appProperties.getJwt().getTtlMinutes()).toSeconds();
         Instant expira = ahora.plusSeconds(ttlSegundos);
 
         JwtClaimsSet claims = JwtClaimsSet.builder()

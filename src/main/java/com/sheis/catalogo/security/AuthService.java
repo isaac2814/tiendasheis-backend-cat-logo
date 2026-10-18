@@ -39,7 +39,7 @@ public class AuthService {
     @Transactional(readOnly = true)
     public LoginResponse login(LoginRequest request, String clientIp) {
         if (rateLimiter.estaBloqueado(clientIp, request.email())) {
-            throw new RateLimitException("Demasiados intentos fallidos. Por favor espere 15 minutos antes de intentar de nuevo.");
+            throw new RateLimitException();
         }
 
         AdminUsuario admin = adminUsuarioRepository.findByEmailIgnoreCaseAndActivoTrue(request.email())

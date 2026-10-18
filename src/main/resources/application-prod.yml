@@ -1,11 +1,67 @@
-# Perfil de PRODUCCIÓN. Activar con: SPRING_PROFILES_ACTIVE=prod
-#
+# ============================================================================
+# Perfil de PRODUCCIÓN — activar con: SPRING_PROFILES_ACTIVE=prod
+# ============================================================================
 # Endurece la configuración para exposición pública:
-#  - Desactiva Swagger / OpenAPI (no revelar la superficie de la API administrativa).
-#  - El healthcheck no expone detalles internos.
+#   - Puerto y proxy inverso (HTTPS terminado aguas arriba).
+#   - Base de datos SOLO por variables de entorno (sin valores por defecto).
+#   - Pool de conexiones pequeño (el pooler de la base limita las conexiones).
+#   - CORS restringido a los orígenes indicados: sin CORS_ORIGINS la app NO arranca.
+#   - Swagger/OpenAPI desactivado y sin rutas permitidas.
+#   - Errores sin detalle interno y logs sin SQL ni datos sensibles.
 #
-# El resto de valores sensibles (DB, JWT_SECRET, ADMIN_*, CORS_ALLOWED_ORIGINS,
-# TRUST_FORWARDED_HEADERS) se inyectan por variables de entorno.
+# Secretos: NUNCA en este archivo. Se inyectan por variables de entorno
+# (ver .env.example / DEPLOY.md).
+
+server:
+  port: ${PORT:8082}
+  # Respeta X-Forwarded-* cuando hay un proxy inverso de confianza delante (HTTPS).
+  forward-headers-strategy: framework
+  compression:
+    enabled: true
+    mime-types: application/json,text/plain,text/css,application/javascript,text/html
+    min-response-size: 1024
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+    include-exception: false
+
+spring:
+  datasource:
+    # Sin valor por defecto: si falta cualquiera, la app falla al arrancar (fail-fast).
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      pool-name: sheis-prod-pool
+      maximum-pool-size: 5
+      minimum-idle: 1
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    enabled: true
+    # Supabase (pooler en modo transacción) + ALTER sobre la propia tabla de
+    # historial: con el lock transaccional por defecto, Flyway mantiene bloqueada
+    # flyway_schema_history y la migración V5 expira (statement timeout). Un lock
+    # a nivel de sesión evita ese bloqueo propio.
+    postgresql:
+      transactional-lock: false
+
+app:
+  cors:
+    # Lista separada por comas. SIN valor por defecto: sin esta variable la app no arranca.
+    allowed-origins: ${CORS_ORIGINS}
+  jwt:
+    secret: ${JWT_SECRET}
+    ttl-minutes: ${JWT_EXPIRATION_MINUTES:480}
+  security:
+    # En producción Swagger no existe ni tiene rutas permitidas.
+    permit-swagger: false
 
 springdoc:
   api-docs:
@@ -14,10 +70,18 @@ springdoc:
     enabled: false
 
 management:
-  endpoint:
-    health:
-      show-details: never
   endpoints:
     web:
       exposure:
         include: health
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: INFO
+    com.sheis.catalogo: INFO
+    org.hibernate.SQL: WARN
+    org.hibernate.orm.jdbc.bind: WARN
+    org.springframework.web: WARN

@@ -29,27 +29,25 @@ public class DataInitializer implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (adminUsuarioRepository.count() == 0) {
-            String email = appProperties.getAdmin().getEmail();
-            String password = appProperties.getAdmin().getPassword();
-
-            if (email != null && !email.isBlank() && password != null && !password.isBlank()) {
-                if (password.length() < 10) {
-                    log.warn("ADMIN_PASSWORD configurado tiene menos de 10 caracteres; no se creará el usuario administrador por seguridad.");
-                    return;
-                }
-
-                AdminUsuario admin = AdminUsuario.builder()
-                        .email(email.trim().toLowerCase())
-                        .passwordHash(passwordEncoder.encode(password))
-                        .nombre("Administrador")
-                        .activo(true)
-                        .creadoEn(OffsetDateTime.now())
-                        .build();
-
-                adminUsuarioRepository.save(admin);
-                log.info("Usuario administrador inicial creado exitosamente para el correo: {}", email.trim().toLowerCase());
-            }
+        // El admin inicial SOLO se crea si no hay ningún usuario. Si ya existe, nunca se
+        // sobrescribe su contraseña (ni aunque cambien ADMIN_EMAIL/ADMIN_PASSWORD).
+        if (adminUsuarioRepository.count() > 0) {
+            return;
         }
+
+        // AppProperties.validate() ya garantiza que email/password están presentes y son fuertes.
+        String email = appProperties.getAdmin().getEmail().trim().toLowerCase();
+        String password = appProperties.getAdmin().getPassword();
+
+        AdminUsuario admin = AdminUsuario.builder()
+                .email(email)
+                .passwordHash(passwordEncoder.encode(password))
+                .nombre("Administrador")
+                .activo(true)
+                .creadoEn(OffsetDateTime.now())
+                .build();
+
+        adminUsuarioRepository.save(admin);
+        log.info("Usuario administrador inicial creado para: {}", email);
     }
 }

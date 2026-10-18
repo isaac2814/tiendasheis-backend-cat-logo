@@ -33,8 +33,8 @@ app:
   cors:
     allowed-origins: http://localhost:5173
   jwt:
-    secret: super_secret_jwt_key_at_least_32_characters_123456
-    ttl-hours: 8
+    secret: test_only_secret_key_not_for_production_0123456789
+    ttl-minutes: 480
   admin:
     email: admin@test.com
     password: AdminPasswordTest123!

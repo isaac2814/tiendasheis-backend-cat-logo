@@ -100,6 +100,14 @@ class SecurityAndAdminTest {
     }
 
     @Test
+    @DisplayName("/api/admin/** con token inválido retorna 401 Unauthorized")
+    void testAdminConTokenInvalidoRetorna401() throws Exception {
+        mockMvc.perform(get("/api/admin/catalogo")
+                        .header("Authorization", "Bearer no-es-un-jwt-valido"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("/api/admin/** con token con rol ADMIN retorna 200 OK")
     void testAdminConTokenAdminValidoRetorna200() throws Exception {
         String tokenAdmin = generarTokenConRoles(List.of("ADMIN"));
@@ -107,6 +115,15 @@ class SecurityAndAdminTest {
         mockMvc.perform(get("/api/admin/catalogo")
                         .header("Authorization", "Bearer " + tokenAdmin))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Las rutas /api/public/** solo aceptan GET (POST retorna 405)")
+    void testPublicoSoloAceptaGet() throws Exception {
+        mockMvc.perform(post("/api/public/catalogo")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isMethodNotAllowed());
     }
 
     @Test

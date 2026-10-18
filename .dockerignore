@@ -1,0 +1,37 @@
+# ============================================================================
+# Archivos que NO deben entrar al contexto de build de Docker.
+# ============================================================================
+
+# Build de Maven
+target/
+
+# Control de versiones y metadatos
+.git/
+.gitignore
+.gitattributes
+
+# Secretos y configuración local (NUNCA a la imagen)
+.env
+.env.*
+*.env
+application-local*.yml
+*.local.yml
+
+# Documentación y scripts que no se necesitan para compilar
+*.md
+docs/
+mvnw
+mvnw.cmd
+.mvn/
+
+# IDE / SO
+.idea/
+.vscode/
+.settings/
+*.iml
+.DS_Store
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml

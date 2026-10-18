@@ -27,11 +27,11 @@ import java.time.Duration;
 public class CatalogoPublicoController {
 
     /**
-     * El navegador puede reutilizar la respuesta 30 s y, pasado ese tiempo, debe revalidar con el
+     * El navegador puede reutilizar la respuesta 60 s y, pasado ese tiempo, debe revalidar con el
      * ETag (respuesta 304 barata) antes de servir una copia vieja.
      */
     private static final CacheControl CATALOGO_CACHE_CONTROL =
-            CacheControl.maxAge(Duration.ofSeconds(30)).cachePublic().mustRevalidate();
+            CacheControl.maxAge(Duration.ofSeconds(60)).cachePublic().mustRevalidate();
 
     private final CatalogoPublicoService catalogoPublicoService;
     private final JsonMapper jsonMapper;
