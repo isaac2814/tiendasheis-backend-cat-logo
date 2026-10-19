@@ -261,7 +261,7 @@ Servicio → Modalidad (SkuCategoria) → Tarifa (paquete cerrado)
 
 ## 8. Pruebas Automatizadas
 
-### Suite de tests (30/30 ✅)
+### Suite de tests (48/48 ✅)
 
 | Clase | Tests | Cobertura |
 |:--|:--|:--|
@@ -271,9 +271,11 @@ Servicio → Modalidad (SkuCategoria) → Tarifa (paquete cerrado)
 | `MetodoPagoImagenIntegrationTest` | Integración | Subir/borrar/consultar imagen de método de pago, 401/404/400, cascada |
 | `SecurityAndAdminTest` | Integración | Auth 401/403/200, login válido/inválido, rate limiting (incl. no-bypass por `X-Forwarded-For`) |
 | `Plan Estimation` y `Planes Validation` | Integración | Estimación/validación de planes |
+| `CorsOriginsNormalizationTest` | Unitarios | Normalización de `CORS_ORIGINS` (barra final, espacios, saltos de línea, comas, mayúsculas, duplicados) y log INFO |
+| `CorsConfigurationTest` | Integración CORS | Origen permitido/denegado, comparación case-insensitive, preflight `OPTIONS` de catálogo y login, log WARN |
 | `CatalogoApplicationTests` | Contexto | Carga del contexto Spring |
 
-**Resultado**: `Tests run: 30, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS`
+**Resultado**: `Tests run: 48, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS`
 
 **Nota**: los tests usan H2 con `ddl-auto: create-drop` y **Flyway deshabilitado**, por lo que el esquema lo
 genera Hibernate desde las entidades y **no hay datos seed**; los tests de integración de imagen crean el
@@ -392,6 +394,29 @@ usa **PATCH** (`/visible`, `/stock`); se mantuvo PATCH para no romper funcionali
 (`/v3/api-docs`, `/swagger-ui`) no accesible (401 anón / 403 con sesión); 6.º login fallido → 429.
 Tests backend **38/38 `BUILD SUCCESS`**.
 
+### DEC-011 — Normalización de `CORS_ORIGINS` y diagnóstico de orígenes
+**Fecha:** 2026-10-18
+**Decisión:** `AppProperties.getAllowedOriginsList()` normaliza cada origen: separa por coma **o cualquier
+espacio/salto de línea** (`split("[,\\s]+")`), recorta espacios, elimina barras finales (`/+$`), descarta
+vacíos, pasa a minúsculas y elimina duplicados. Al arrancar registra en **INFO** la lista final
+(`CORS: orígenes permitidos (N): [...]`). `NormalizedCorsConfiguration` (subclase de `CorsConfiguration`,
+registrada en `SecurityConfig`) sobrescribe `checkOrigin` para comparar sin distinguir mayúsculas y
+devolver el origen recibido si coincide; si no, registra **WARN** con el origen rechazado y la lista
+permitida (`CORS: origen rechazado '...'`).
+**Motivo:** Los paneles de despliegue (Render/Railway/Vercel) introducen espacios, saltos de línea, comas
+finales y barras finales al pegar `CORS_ORIGINS`; una comparación literal rompía el CORS y el navegador
+mostraba errores opacos. Los logs permiten diagnosticar sin adivinar.
+**Trampa (tests):** un `\n` dentro de `@SpringBootTest(properties = ...)` se trunca al parsear; usar
+`@DynamicPropertySource` para inyectar el valor multilínea real.
+**Verificado (perfil `prod`, Supabase):** `CORS_ORIGINS` con espacios + barra final → INFO con 1 origen
+normalizado; con salto de línea + mayúsculas + `///` + comas → INFO con 3 orígenes; `GET
+/api/public/catalogo` 200 con `Access-Control-Allow-Origin` igual al origen; orígenes en minúsculas
+aceptados contra config en mayúsculas; origen no permitido → 403 `Invalid CORS request` + WARN; preflight
+`OPTIONS /api/public/catalogo` y `/api/auth/login` → 200 con `Allow-Methods`/`Allow-Headers` y
+`Allow-Credentials: true`. Tests backend **48/48**.
+**Impacto:** `AppProperties`, `security/NormalizedCorsConfiguration`, `SecurityConfig`,
+`CorsOriginsNormalizationTest`, `CorsConfigurationTest`.
+
 ---
 
 ## 10. Problemas Conocidos y Trampas
@@ -427,6 +452,7 @@ Tests backend **38/38 `BUILD SUCCESS`**.
 | Caché HTTP del catálogo público (ETag/304) | 2026-10-16 | `GET /api/public/catalogo` con `ETag` + `Cache-Control` y 304 condicional (ver DEC-008) |
 | RLS de Supabase (V5) en las 13 tablas | 2026-10-16 | Sin políticas; dueño JDBC exento; `transactional-lock=false` en prod (ver DEC-009) |
 | Endurecimiento y empaquetado para producción | 2026-10-16 | Fail-fast secretos, perfil `prod`, rate limit 5/min, Dockerfile no-root, `DEPLOY.md` (ver DEC-010) |
+| CORS tolerante a entornos de despliegue | 2026-10-18 | Normaliza `CORS_ORIGINS` (espacios, saltos, comas, barras, mayúsculas), logs INFO/WARN y preflight verificado (ver DEC-011) |
 
 ---
 
@@ -447,6 +473,9 @@ Tests backend **38/38 `BUILD SUCCESS`**.
 ---
 
 ## Historial Reciente de Cambios
+
+### 2026-10-18
+- **CORS tolerante a entornos de despliegue (DEC-011)**: `CORS_ORIGINS` se normaliza (comas/espacios/saltos de línea, barras finales, mayúsculas, duplicados), log INFO al arrancar y WARN al rechazar un origen. Verificado con curl contra perfil `prod`: ACAO exacto, preflight 200 en catálogo y login, 403 + WARN para origen no permitido. Tests **48/48**.
 
 ### 2026-10-16
 - **Listo para producción (DEC-009/DEC-010)**: migración RLS `V5` aplicada en Supabase (`transactional-lock=false` en `prod`), fail-fast de secretos, perfil `prod` endurecido, rate limit 5/min, `Dockerfile` multi-etapa no-root, `DEPLOY.md`. Verificado en local con perfil `prod`: health 200, catálogo ETag 60 s, admin 401, Swagger inaccesible, 6.º login → 429. Tests **38/38**.

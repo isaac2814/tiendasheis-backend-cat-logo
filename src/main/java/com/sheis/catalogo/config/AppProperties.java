@@ -3,21 +3,27 @@ package com.sheis.catalogo.config;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 @Getter
 @Setter
+@Slf4j
 @Configuration
 @ConfigurationProperties(prefix = "app")
 public class AppProperties {
 
     private static final int JWT_SECRET_MIN_LENGTH = 32;
     private static final int ADMIN_PASSWORD_MIN_LENGTH = 10;
+
+    /** Origen usado solo cuando no se configura ningún origen (desarrollo local). */
+    private static final String DEFAULT_ORIGIN = "http://localhost:5173";
 
     /**
      * Valores de secreto de ejemplo/desarrollo que JAMÁS deben usarse en un despliegue real.
@@ -41,15 +47,25 @@ public class AppProperties {
     @Getter
     @Setter
     public static class Cors {
-        private String allowedOrigins = "http://localhost:5173";
+        private String allowedOrigins = DEFAULT_ORIGIN;
 
+        /**
+         * Devuelve los orígenes permitidos ya normalizados: sin espacios ni saltos de
+         * línea alrededor, sin barra final, en minúsculas, sin entradas vacías y sin
+         * duplicados. Se admiten varios orígenes separados por coma (o por espacios /
+         * saltos de línea). La comparación posterior es insensible a mayúsculas.
+         */
         public List<String> getAllowedOriginsList() {
             if (allowedOrigins == null || allowedOrigins.isBlank()) {
-                return List.of("http://localhost:5173");
+                return List.of(DEFAULT_ORIGIN);
             }
-            return Arrays.stream(allowedOrigins.split(","))
-                    .map(String::trim)
+            return Arrays.stream(allowedOrigins.split("[,\\s]+"))
+                    .map(String::strip)
                     .filter(s -> !s.isEmpty())
+                    .map(s -> s.replaceAll("/+$", ""))
+                    .filter(s -> !s.isEmpty())
+                    .map(s -> s.toLowerCase(Locale.ROOT))
+                    .distinct()
                     .toList();
         }
     }
@@ -95,6 +111,8 @@ public class AppProperties {
     public void validate() {
         validarJwt();
         validarAdmin();
+        List<String> origenes = cors.getAllowedOriginsList();
+        log.info("CORS: orígenes permitidos ({}): {}", origenes.size(), origenes);
     }
 
     private void validarJwt() {
