@@ -52,6 +52,7 @@ app:
   admin:
     email: ${ADMIN_EMAIL:}
     password: ${ADMIN_PASSWORD:}
+    reset-password: ${ADMIN_RESET_PASSWORD:false}
   proxy:
     trust-forwarded-headers: ${TRUST_FORWARDED_HEADERS:false}
   security:

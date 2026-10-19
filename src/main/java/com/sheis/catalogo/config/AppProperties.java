@@ -83,6 +83,16 @@ public class AppProperties {
     public static class Admin {
         private String email = "";
         private String password = "";
+        /**
+         * Restablecimiento opcional de la contraseña al arrancar (ADMIN_RESET_PASSWORD).
+         * Solo se activa con el valor {@code true} (sin distinguir mayúsculas); cualquier
+         * otro valor mantiene el comportamiento normal.
+         */
+        private String resetPassword = "";
+
+        public boolean isResetPasswordEnabled() {
+            return resetPassword != null && resetPassword.trim().equalsIgnoreCase("true");
+        }
     }
 
     @Getter

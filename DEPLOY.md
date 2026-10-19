@@ -27,6 +27,7 @@ El perfil `prod` **no arranca** si falta alguno de los valores obligatorios.
 | `JWT_EXPIRATION_MINUTES` | No | Caducidad del token en minutos. Por defecto `480` (8 horas). |
 | `ADMIN_EMAIL` | Sí | Correo del administrador inicial. |
 | `ADMIN_PASSWORD` | Sí | Contraseña del administrador inicial. **Mínimo 10 caracteres.** |
+| `ADMIN_RESET_PASSWORD` | No | `true` para restablecer la contraseña del admin al arrancar. **Usar una sola vez** y luego eliminarla. Por defecto `false`. |
 | `CORS_ORIGINS` | Sí | Orígenes permitidos del frontend, separados por comas (p. ej. `https://tudominio.com,https://www.tudominio.com`). Sin esta variable la app no arranca. |
 | `PORT` | No | Puerto de escucha. Por defecto `8082` (en la imagen Docker es `8080`). |
 | `TRUST_FORWARDED_HEADERS` | No | `true` **solo** detrás de un proxy de confianza que sobrescriba `X-Forwarded-For`. Por defecto `false`. |
@@ -96,7 +97,18 @@ curl http://localhost:8080/actuator/health
 
 - Se crea **automáticamente** en el primer arranque, **solo** si la tabla `admin_usuarios` está **vacía**, usando `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 - Si ya existe al menos un usuario, **no se crea ni se sobrescribe nada** (cambiar `ADMIN_PASSWORD` luego no altera la contraseña existente).
-- Para rotar la contraseña: actualízala directamente en la base (hash BCrypt).
+- Para restablecer una contraseña olvidada, usa el mecanismo opcional de la sección 5.1.
+
+### 5.1. Restablecimiento opcional de la contraseña
+
+Si necesitas recuperar el acceso al panel:
+
+1. Define temporalmente `ADMIN_RESET_PASSWORD=true` junto con `ADMIN_EMAIL` y `ADMIN_PASSWORD` (≥ 10 caracteres) en el servicio.
+2. Reinicia el backend. Al arrancar se actualiza el hash del admin cuyo correo coincide con `ADMIN_EMAIL`; si ese correo no existe, se crea.
+3. El log muestra `Contraseña del admin restablecida; elimina ADMIN_RESET_PASSWORD` (nunca se registra la contraseña ni el hash).
+4. Elimina `ADMIN_RESET_PASSWORD` (o ponlo en `false`) y reinicia.
+
+Si la variable no existe o no vale `true`, no se modifica ninguna contraseña.
 
 ---
 

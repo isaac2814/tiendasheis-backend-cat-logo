@@ -93,7 +93,7 @@ C:\Sheis catálogo\Backend catalogo\
     │   ├── CatalogoApplication.java
     │   ├── config/
     │   │   ├── AppProperties.java      # Propiedades app.cors, app.jwt, app.admin, app.proxy
-    │   │   ├── DataInitializer.java     # Crea admin inicial si tabla vacía
+    │   │   ├── DataInitializer.java     # Crea admin inicial y aplica ADMIN_RESET_PASSWORD
     │   │   └── OpenApiConfig.java       # Configuración Swagger/OpenAPI
     │   ├── domain/
     │   │   ├── AdminUsuario.java        # Usuarios administradores
@@ -261,7 +261,7 @@ Servicio → Modalidad (SkuCategoria) → Tarifa (paquete cerrado)
 
 ## 8. Pruebas Automatizadas
 
-### Suite de tests (48/48 ✅)
+### Suite de tests (52/52 ✅)
 
 | Clase | Tests | Cobertura |
 |:--|:--|:--|
@@ -273,9 +273,10 @@ Servicio → Modalidad (SkuCategoria) → Tarifa (paquete cerrado)
 | `Plan Estimation` y `Planes Validation` | Integración | Estimación/validación de planes |
 | `CorsOriginsNormalizationTest` | Unitarios | Normalización de `CORS_ORIGINS` (barra final, espacios, saltos de línea, comas, mayúsculas, duplicados) y log INFO |
 | `CorsConfigurationTest` | Integración CORS | Origen permitido/denegado, comparación case-insensitive, preflight `OPTIONS` de catálogo y login, log WARN |
+| `DataInitializerTest` | Unitarios | Creación del admin inicial y restablecimiento opcional (`ADMIN_RESET_PASSWORD`) sin duplicar ni tocar el hash cuando está desactivado |
 | `CatalogoApplicationTests` | Contexto | Carga del contexto Spring |
 
-**Resultado**: `Tests run: 48, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS`
+**Resultado**: `Tests run: 52, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS`
 
 **Nota**: los tests usan H2 con `ddl-auto: create-drop` y **Flyway deshabilitado**, por lo que el esquema lo
 genera Hibernate desde las entidades y **no hay datos seed**; los tests de integración de imagen crean el
@@ -417,6 +418,17 @@ aceptados contra config en mayúsculas; origen no permitido → 403 `Invalid COR
 **Impacto:** `AppProperties`, `security/NormalizedCorsConfiguration`, `SecurityConfig`,
 `CorsOriginsNormalizationTest`, `CorsConfigurationTest`.
 
+### DEC-012 — Restablecimiento opcional de la contraseña del admin (`ADMIN_RESET_PASSWORD`)
+**Fecha:** 2026-10-19
+**Decisión:** Si `ADMIN_RESET_PASSWORD=true` (sin distinguir mayúsculas; cualquier otro valor se ignora),
+`DataInitializer` actualiza al arrancar el hash BCrypt del admin cuyo correo coincide con `ADMIN_EMAIL`
+(búsqueda case-insensitive); si ese correo no existe, lo crea. Solo se registra en INFO
+`Contraseña del admin restablecida; elimina ADMIN_RESET_PASSWORD`; **nunca** se loguean la contraseña ni el hash.
+`ADMIN_EMAIL`/`ADMIN_PASSWORD` siguen validándose con las reglas existentes (fail-fast y mínimo 10 caracteres).
+**Motivo:** Permitir recuperar el acceso al panel en producción sin tocar la BD ni exponer credenciales.
+**Impacto:** `AppProperties.Admin`, `DataInitializer`, `AdminUsuarioRepository.findByEmailIgnoreCase`,
+`application.yml`, `.env.example`, `DEPLOY.md`, `DataInitializerTest`.
+
 ---
 
 ## 10. Problemas Conocidos y Trampas
@@ -453,6 +465,7 @@ aceptados contra config en mayúsculas; origen no permitido → 403 `Invalid COR
 | RLS de Supabase (V5) en las 13 tablas | 2026-10-16 | Sin políticas; dueño JDBC exento; `transactional-lock=false` en prod (ver DEC-009) |
 | Endurecimiento y empaquetado para producción | 2026-10-16 | Fail-fast secretos, perfil `prod`, rate limit 5/min, Dockerfile no-root, `DEPLOY.md` (ver DEC-010) |
 | CORS tolerante a entornos de despliegue | 2026-10-18 | Normaliza `CORS_ORIGINS` (espacios, saltos, comas, barras, mayúsculas), logs INFO/WARN y preflight verificado (ver DEC-011) |
+| Restablecimiento opcional de contraseña del admin | 2026-10-19 | `ADMIN_RESET_PASSWORD=true` actualiza el hash del admin de `ADMIN_EMAIL` o lo crea; log INFO sin secretos (ver DEC-012) |
 
 ---
 
@@ -473,6 +486,9 @@ aceptados contra config en mayúsculas; origen no permitido → 403 `Invalid COR
 ---
 
 ## Historial Reciente de Cambios
+
+### 2026-10-19
+- **Restablecimiento opcional de la contraseña del admin (DEC-012)**: con `ADMIN_RESET_PASSWORD=true` se actualiza el hash BCrypt del admin de `ADMIN_EMAIL` (o se crea si no existe) al arrancar; log INFO sin contraseña ni hash. Desactivado por defecto. Tests **52/52**.
 
 ### 2026-10-18
 - **CORS tolerante a entornos de despliegue (DEC-011)**: `CORS_ORIGINS` se normaliza (comas/espacios/saltos de línea, barras finales, mayúsculas, duplicados), log INFO al arrancar y WARN al rechazar un origen. Verificado con curl contra perfil `prod`: ACAO exacto, preflight 200 en catálogo y login, 403 + WARN para origen no permitido. Tests **48/48**.
