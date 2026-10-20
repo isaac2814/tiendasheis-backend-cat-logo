@@ -7,6 +7,8 @@ import com.sheis.catalogo.exception.ResourceNotFoundException;
 import com.sheis.catalogo.repository.*;
 import com.sheis.catalogo.stock.StockProvider;
 import com.sheis.catalogo.web.dto.admin.*;
+import com.sheis.catalogo.web.dto.publico.CatalogoTextosDto;
+import com.sheis.catalogo.web.dto.publico.FavoritoDto;
 import com.sheis.catalogo.web.dto.publico.HorarioDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
@@ -112,7 +114,9 @@ public class CatalogoAdminService {
                     stock,
                     agotado,
                     precioBase,
-                    planes
+                    planes,
+                    s.getLema(),
+                    s.getFavoritoOrden()
             ));
         }
 
@@ -139,14 +143,35 @@ public class CatalogoAdminService {
                             p.precioNormal(),
                             p.descuento(),
                             p.precio(),
-                            agotado
+                            agotado,
+                            c.getVisible() != null ? c.getVisible() : (c.getActivo() != null ? c.getActivo() : true),
+                            c.getEtiqueta(),
+                            c.getFavoritoOrden()
                     );
                 })
                 .toList();
 
         AdminAjustesDto ajustes = obtenerAjustes();
 
-        return new AdminCatalogoSnapshot(serviciosDtos, combosDtos, descuentos, ajustes);
+        // Favoritos ordenados para el panel de administración
+        record TempFav(String tipo, String ref, int orden) {}
+        List<TempFav> tempFavs = new ArrayList<>();
+        for (SkuCategoria s : todos) {
+            if (s.getFavoritoOrden() != null) {
+                tempFavs.add(new TempFav("servicio", s.getCodigo(), s.getFavoritoOrden()));
+            }
+        }
+        for (AdminComboDto c : combosDtos) {
+            if (c.favoritoOrden() != null && c.id() != null) {
+                tempFavs.add(new TempFav("combo", String.valueOf(c.id()), c.favoritoOrden()));
+            }
+        }
+        tempFavs.sort(Comparator.comparingInt(TempFav::orden));
+        List<FavoritoDto> favoritos = tempFavs.stream()
+                .map(f -> new FavoritoDto(f.tipo(), f.ref()))
+                .toList();
+
+        return new AdminCatalogoSnapshot(serviciosDtos, combosDtos, descuentos, ajustes, favoritos);
     }
 
     // ==================== SERVICIOS ====================
@@ -165,6 +190,11 @@ public class CatalogoAdminService {
         Servicio servicio = servicioRepository.findByNombre(req.nombre())
                 .orElseGet(() -> servicioRepository.save(Servicio.builder().nombre(req.nombre()).build()));
 
+        String lema = req.lema() != null ? req.lema().trim() : null;
+        if (lema != null && lema.length() > 30) {
+            throw new BadRequestException("El lema del servicio no puede superar los 30 caracteres");
+        }
+
         SkuCategoria s = SkuCategoria.builder()
                 .servicio(servicio)
                 .codigo(codigo)
@@ -180,6 +210,8 @@ public class CatalogoAdminService {
                 .orden(req.orden() != null ? req.orden() : 0)
                 .visible(req.visible() != null ? req.visible() : true)
                 .stockManual(req.stockManual())
+                .lema(lema != null && !lema.isEmpty() ? lema : null)
+                .favoritoOrden(req.favoritoOrden())
                 .build();
 
         s = skuCategoriaRepository.save(s);
@@ -215,6 +247,16 @@ public class CatalogoAdminService {
         s.setLogoUrl(req.logoUrl() != null && !req.logoUrl().isBlank() ? req.logoUrl().trim() : null);
         if (req.orden() != null) {
             s.setOrden(req.orden());
+        }
+        if (req.lema() != null) {
+            String lema = req.lema().trim();
+            if (lema.length() > 30) {
+                throw new BadRequestException("El lema del servicio no puede superar los 30 caracteres");
+            }
+            s.setLema(lema.isEmpty() ? null : lema);
+        }
+        if (req.favoritoOrden() != null) {
+            s.setFavoritoOrden(req.favoritoOrden());
         }
 
         s = skuCategoriaRepository.save(s);
@@ -267,6 +309,7 @@ public class CatalogoAdminService {
     }
 
     @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
     public ImagenServicioStore.ImagenGuardada guardarImagen(String codigo, byte[] bytes, String declaredContentType) {
         if (!skuCategoriaRepository.existsByCodigo(codigo)) {
             throw new ResourceNotFoundException("El servicio '" + codigo + "' no existe");
@@ -276,11 +319,13 @@ public class CatalogoAdminService {
     }
 
     @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
     public void eliminarImagen(String codigo) {
         imagenServicioStore.eliminar(codigo);
     }
 
     @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
     public ImagenMetodoPagoStore.ImagenGuardada guardarImagenMetodoPago(String id, byte[] bytes, String declaredContentType) {
         if (!metodoPagoRepository.existsById(id)) {
             throw new ResourceNotFoundException("El método de pago '" + id + "' no existe");
@@ -290,6 +335,7 @@ public class CatalogoAdminService {
     }
 
     @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
     public void eliminarImagenMetodoPago(String id) {
         imagenMetodoPagoStore.eliminar(id);
     }
@@ -386,30 +432,66 @@ public class CatalogoAdminService {
             if (distinct.size() != in.servicios().size()) {
                 throw new BadRequestException("Un combo no puede contener servicios repetidos");
             }
+            String badge = in.getEtiquetaEfectiva();
+            if (badge.length() > 30) {
+                throw new BadRequestException("La etiqueta/badge del combo no puede superar los 30 caracteres");
+            }
         }
 
-        comboRepository.deleteAll();
-        comboRepository.flush();
+        Map<Long, Combo> existentesMap = comboRepository.findAll().stream()
+                .collect(Collectors.toMap(Combo::getId, c -> c));
 
-        List<Combo> nuevos = new ArrayList<>();
+        Set<Long> idsConservados = new HashSet<>();
+        List<Combo> aGuardar = new ArrayList<>();
         int defaultOrden = 1;
+
         for (AdminComboInputDto in : inputs) {
             List<SkuCategoria> servicios = skuCategoriaRepository.findByCodigoIn(in.servicios());
             if (servicios.size() != in.servicios().size()) {
                 throw new BadRequestException("Uno o más códigos de servicio especificados en el combo no existen");
             }
 
-            Combo c = Combo.builder()
-                    .etiqueta(in.etiqueta() != null ? in.etiqueta().trim() : "")
-                    .activo(in.activo() != null ? in.activo() : true)
-                    .orden(in.orden() != null ? in.orden() : defaultOrden++)
-                    .servicios(new ArrayList<>(servicios))
-                    .build();
+            String etiqueta = in.getEtiquetaEfectiva();
+            boolean visible = in.getVisibleEfectivo();
+            int orden = in.orden() != null ? in.orden() : defaultOrden++;
+            Integer favoritoOrden = in.favoritoOrden();
 
-            nuevos.add(c);
+            Combo combo;
+            if (in.id() != null && existentesMap.containsKey(in.id())) {
+                combo = existentesMap.get(in.id());
+                idsConservados.add(combo.getId());
+                combo.setEtiqueta(etiqueta);
+                combo.setActivo(visible);
+                combo.setVisible(visible);
+                combo.setOrden(orden);
+                if (favoritoOrden != null) {
+                    combo.setFavoritoOrden(favoritoOrden);
+                }
+                combo.setServicios(new ArrayList<>(servicios));
+            } else {
+                combo = Combo.builder()
+                        .etiqueta(etiqueta)
+                        .activo(visible)
+                        .visible(visible)
+                        .orden(orden)
+                        .favoritoOrden(favoritoOrden)
+                        .servicios(new ArrayList<>(servicios))
+                        .build();
+            }
+            aGuardar.add(combo);
         }
 
-        comboRepository.saveAll(nuevos);
+        // Eliminar combos retirados de la lista (su borrado los quita de favoritos)
+        for (Combo existente : existentesMap.values()) {
+            if (!idsConservados.contains(existente.getId())) {
+                comboRepository.delete(existente);
+            }
+        }
+        comboRepository.flush();
+
+        comboRepository.saveAll(aGuardar);
+        comboRepository.flush();
+
         return obtenerCombos();
     }
 
@@ -515,7 +597,17 @@ public class CatalogoAdminService {
                 })
                 .toList();
 
-        return new AdminAjustesDto(whatsapp, sobreNosotros, horarios, metodos);
+        CatalogoTextosDto textos = new CatalogoTextosDto(
+                obtenerConfig("banner_texto", "bannerTexto", "Elige tu mejor servicio y empieza tu maratón", true),
+                obtenerConfig("titulo_favoritos", "tituloFavoritos", "Servicios favoritos", false),
+                obtenerConfig("titulo_servicios", "tituloServicios", "Servicios", false),
+                obtenerConfig("titulo_combos", "tituloCombos", "Combos", false),
+                obtenerConfig("menu_favoritos", "menuFavoritos", "Servicios favoritos", false),
+                obtenerConfig("menu_servicios", "menuServicios", "Servicios individuales", false),
+                obtenerConfig("menu_combos", "menuCombos", "Combos con descuento", false)
+        );
+
+        return new AdminAjustesDto(whatsapp, sobreNosotros, horarios, metodos, textos);
     }
 
     @Transactional
@@ -569,7 +661,123 @@ public class CatalogoAdminService {
             }
         }
 
+        if (dto.textos() != null) {
+            guardarTextoConfig("banner_texto", "bannerTexto", dto.textos().bannerTexto(), 90, "El texto de la banda");
+            guardarTextoConfig("titulo_favoritos", "tituloFavoritos", dto.textos().tituloFavoritos(), 40, "El título de favoritos");
+            guardarTextoConfig("titulo_servicios", "tituloServicios", dto.textos().tituloServicios(), 40, "El título de servicios");
+            guardarTextoConfig("titulo_combos", "tituloCombos", dto.textos().tituloCombos(), 40, "El título de combos");
+            guardarTextoConfig("menu_favoritos", "menuFavoritos", dto.textos().menuFavoritos(), 30, "El texto del menú de favoritos");
+            guardarTextoConfig("menu_servicios", "menuServicios", dto.textos().menuServicios(), 30, "El texto del menú de servicios");
+            guardarTextoConfig("menu_combos", "menuCombos", dto.textos().menuCombos(), 30, "El texto del menú de combos");
+        }
+
         return obtenerAjustes();
+    }
+
+    private String obtenerConfig(String snakeClave, String camelClave, String def, boolean permitirVacio) {
+        return catalogoConfigRepository.findByClave(snakeClave)
+                .or(() -> catalogoConfigRepository.findByClave(camelClave))
+                .map(CatalogoConfig::getValor)
+                .map(String::trim)
+                .filter(v -> permitirVacio || !v.isEmpty())
+                .orElse(def);
+    }
+
+    private void guardarTextoConfig(String snakeClave, String camelClave, String valor, int maxLen, String nombreCampo) {
+        if (valor == null) return;
+        String trimmed = valor.trim();
+        if (trimmed.length() > maxLen) {
+            throw new BadRequestException(nombreCampo + " no puede superar los " + maxLen + " caracteres");
+        }
+        CatalogoConfig cfg = catalogoConfigRepository.findByClave(snakeClave)
+                .or(() -> catalogoConfigRepository.findByClave(camelClave))
+                .orElse(CatalogoConfig.builder().clave(snakeClave).build());
+        cfg.setValor(trimmed);
+        catalogoConfigRepository.save(cfg);
+    }
+
+    // ==================== FAVORITOS ====================
+
+    @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
+    public List<FavoritoDto> actualizarFavoritos(List<FavoritoItemRequest> items) {
+        if (items == null) {
+            items = List.of();
+        }
+
+        if (items.size() > 12) {
+            throw new BadRequestException("No se pueden configurar más de 12 favoritos");
+        }
+
+        Set<String> seen = new HashSet<>();
+        List<FavoritoDto> resultado = new ArrayList<>();
+
+        // 1. Validaciones previas
+        for (FavoritoItemRequest item : items) {
+            if (item.tipo() == null || item.tipo().isBlank()) {
+                throw new BadRequestException("El tipo de favorito es obligatorio");
+            }
+            if (item.ref() == null || item.ref().isBlank()) {
+                throw new BadRequestException("La referencia del favorito es obligatoria");
+            }
+            String tipo = item.tipo().trim().toLowerCase();
+            String ref = item.ref().trim();
+
+            if (!"servicio".equals(tipo) && !"combo".equals(tipo)) {
+                throw new BadRequestException("Tipo de favorito desconocido: '" + tipo + "'. Debe ser 'servicio' o 'combo'");
+            }
+
+            String uniqueKey = tipo + ":" + ref;
+            if (!seen.add(uniqueKey)) {
+                throw new BadRequestException("No se permiten favoritos duplicados: " + ref);
+            }
+
+            if ("servicio".equals(tipo)) {
+                if (!skuCategoriaRepository.existsByCodigo(ref)) {
+                    throw new BadRequestException("El servicio con código '" + ref + "' no existe");
+                }
+            } else {
+                long comboId;
+                try {
+                    comboId = Long.parseLong(ref);
+                } catch (NumberFormatException e) {
+                    throw new BadRequestException("La referencia del combo debe ser un ID numérico válido: '" + ref + "'");
+                }
+                if (!comboRepository.existsById(comboId)) {
+                    throw new BadRequestException("El combo con ID '" + ref + "' no existe");
+                }
+            }
+        }
+
+        // 2. Limpiar todos los favoritos existentes
+        skuCategoriaRepository.clearAllFavoritoOrden();
+        comboRepository.clearAllFavoritoOrden();
+        skuCategoriaRepository.flush();
+        comboRepository.flush();
+
+        // 3. Asignar nuevo orden 1..N
+        int orden = 1;
+        for (FavoritoItemRequest item : items) {
+            String tipo = item.tipo().trim().toLowerCase();
+            String ref = item.ref().trim();
+
+            if ("servicio".equals(tipo)) {
+                SkuCategoria s = skuCategoriaRepository.findByCodigo(ref)
+                        .orElseThrow(() -> new BadRequestException("El servicio con código '" + ref + "' no existe"));
+                s.setFavoritoOrden(orden++);
+                skuCategoriaRepository.save(s);
+            } else {
+                long comboId = Long.parseLong(ref);
+                Combo c = comboRepository.findById(comboId)
+                        .orElseThrow(() -> new BadRequestException("El combo con ID '" + ref + "' no existe"));
+                c.setFavoritoOrden(orden++);
+                comboRepository.save(c);
+            }
+
+            resultado.add(new FavoritoDto(tipo, ref));
+        }
+
+        return resultado;
     }
 
     private AdminServicioDto mapToAdminDto(SkuCategoria s) {
@@ -608,7 +816,9 @@ public class CatalogoAdminService {
                 stock,
                 agotado,
                 precioBase,
-                planes
+                planes,
+                s.getLema(),
+                s.getFavoritoOrden()
         );
     }
 

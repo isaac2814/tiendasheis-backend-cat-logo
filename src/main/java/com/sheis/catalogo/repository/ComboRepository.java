@@ -15,4 +15,11 @@ public interface ComboRepository extends JpaRepository<Combo, Long> {
 
     @Query("SELECT DISTINCT c FROM Combo c LEFT JOIN FETCH c.servicios s ORDER BY c.orden ASC")
     List<Combo> findAllWithServicios();
+
+    @Query("SELECT DISTINCT c FROM Combo c LEFT JOIN FETCH c.servicios s WHERE c.favoritoOrden IS NOT NULL ORDER BY c.favoritoOrden ASC")
+    List<Combo> findFavoritosWithServicios();
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE Combo c SET c.favoritoOrden = null")
+    void clearAllFavoritoOrden();
 }

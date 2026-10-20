@@ -9,5 +9,19 @@ public record CatalogoPublicoResponse(
         List<MetodoPagoDto> metodosPago,
         List<HorarioDto> horario,
         String whatsapp,
-        String sobreNosotros
-) {}
+        String sobreNosotros,
+        CatalogoTextosDto textos,
+        List<FavoritoDto> favoritos
+) {
+    public CatalogoPublicoResponse(
+            List<ServicioPublicoDto> servicios,
+            List<ComboPublicoDto> combos,
+            DescuentosDto descuentos,
+            List<MetodoPagoDto> metodosPago,
+            List<HorarioDto> horario,
+            String whatsapp,
+            String sobreNosotros
+    ) {
+        this(servicios, combos, descuentos, metodosPago, horario, whatsapp, sobreNosotros, null, List.of());
+    }
+}

@@ -17,11 +17,15 @@ import com.sheis.catalogo.exception.BadRequestException;
 import org.springframework.http.MediaType;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.sheis.catalogo.web.dto.publico.FavoritoDto;
+import org.springframework.security.access.prepost.PreAuthorize;
+
 import java.io.IOException;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/admin")
+@PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "Administración", description = "Endpoints de administración protegidos con JWT (rol ADMIN)")
 @SecurityRequirement(name = "BearerAuth")
 public class CatalogoAdminController {
@@ -186,5 +190,13 @@ public class CatalogoAdminController {
     @Operation(summary = "Actualizar ajustes generales")
     public ResponseEntity<AdminAjustesDto> actualizarAjustes(@Valid @RequestBody AdminAjustesDto dto) {
         return ResponseEntity.ok(catalogoAdminService.actualizarAjustes(dto));
+    }
+
+    // ==================== FAVORITOS ====================
+
+    @PutMapping("/favoritos")
+    @Operation(summary = "Actualizar lista de favoritos ordenados", description = "Reasigna favorito_orden a servicios y combos en una sola transacción")
+    public ResponseEntity<List<FavoritoDto>> actualizarFavoritos(@Valid @RequestBody List<FavoritoItemRequest> favoritos) {
+        return ResponseEntity.ok(catalogoAdminService.actualizarFavoritos(favoritos));
     }
 }

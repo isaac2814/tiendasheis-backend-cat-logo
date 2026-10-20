@@ -21,5 +21,14 @@ public record ActualizarServicioRequest(
         List<String> incluye,
         List<String> recomendaciones,
         String logoUrl,
-        Integer orden
-) {}
+        Integer orden,
+        @jakarta.validation.constraints.Size(max = 30, message = "El lema no puede superar los 30 caracteres")
+        String lema,
+        Integer favoritoOrden
+) {
+    public ActualizarServicioRequest(String nombre, String inicial, String color, String etiqueta,
+                                   String descripcion, List<String> incluye, List<String> recomendaciones,
+                                   String logoUrl, Integer orden) {
+        this(nombre, inicial, color, etiqueta, descripcion, incluye, recomendaciones, logoUrl, orden, null, null);
+    }
+}

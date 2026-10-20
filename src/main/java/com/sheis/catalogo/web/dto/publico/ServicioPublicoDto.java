@@ -16,12 +16,21 @@ public record ServicioPublicoDto(
         Integer stock,
         boolean agotado,
         long precioBase,
-        List<PlanDto> planes
+        List<PlanDto> planes,
+        String lema,
+        Integer orden
 ) {
+    public ServicioPublicoDto(String id, String nombre, String inicial, String color, String logoUrl,
+                              String imagenUrl, String etiqueta, String descripcion, List<String> incluye,
+                              List<String> recomendaciones, Integer stock, boolean agotado,
+                              long precioBase, List<PlanDto> planes) {
+        this(id, nombre, inicial, color, logoUrl, imagenUrl, etiqueta, descripcion, incluye, recomendaciones, stock, agotado, precioBase, planes, null, 0);
+    }
+
     public ServicioPublicoDto(String id, String nombre, String inicial, String color, String logoUrl,
                               String etiqueta, String descripcion, List<String> incluye,
                               List<String> recomendaciones, Integer stock, boolean agotado,
                               long precioBase, List<PlanDto> planes) {
-        this(id, nombre, inicial, color, logoUrl, null, etiqueta, descripcion, incluye, recomendaciones, stock, agotado, precioBase, planes);
+        this(id, nombre, inicial, color, logoUrl, null, etiqueta, descripcion, incluye, recomendaciones, stock, agotado, precioBase, planes, null, 0);
     }
 }

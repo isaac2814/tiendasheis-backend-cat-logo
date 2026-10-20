@@ -9,5 +9,17 @@ public record ComboPublicoDto(
         long precioNormal,
         long descuento,
         long precio,
-        boolean agotado
-) {}
+        boolean agotado,
+        int orden,
+        boolean visible
+) {
+    public ComboPublicoDto(long id, String etiqueta, List<String> servicios, long precioNormal,
+                           long descuento, long precio, boolean agotado) {
+        this(id, etiqueta, servicios, precioNormal, descuento, precio, agotado, 0, true);
+    }
+
+    public ComboPublicoDto(long id, String etiqueta, List<String> servicios, long precioNormal,
+                           long descuento, long precio, boolean agotado, int orden) {
+        this(id, etiqueta, servicios, precioNormal, descuento, precio, agotado, orden, true);
+    }
+}

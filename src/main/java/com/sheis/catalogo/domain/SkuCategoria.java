@@ -61,6 +61,12 @@ public class SkuCategoria {
     @Column(nullable = false)
     private Integer orden = 0;
 
+    @Column(length = 30)
+    private String lema;
+
+    @Column(name = "favorito_orden")
+    private Integer favoritoOrden;
+
     @Column(name = "stock_manual")
     private Integer stockManual;
 
@@ -77,6 +83,14 @@ public class SkuCategoria {
                         String inicial, String color, String logoUrl, String etiqueta, String descripcion,
                         List<String> incluye, List<String> recomendaciones, Boolean visible, Integer orden,
                         Integer stockManual, List<Tarifa> tarifas) {
+        this(id, servicio, codigo, nombre, modalidad, inicial, color, logoUrl, etiqueta, descripcion,
+                incluye, recomendaciones, visible, orden, stockManual, tarifas, null, null);
+    }
+
+    public SkuCategoria(Long id, Servicio servicio, String codigo, String nombre, String modalidad,
+                        String inicial, String color, String logoUrl, String etiqueta, String descripcion,
+                        List<String> incluye, List<String> recomendaciones, Boolean visible, Integer orden,
+                        Integer stockManual, List<Tarifa> tarifas, String lema, Integer favoritoOrden) {
         this.id = id;
         this.servicio = servicio;
         this.codigo = codigo;
@@ -93,6 +107,8 @@ public class SkuCategoria {
         this.orden = orden != null ? orden : 0;
         this.stockManual = stockManual;
         this.tarifas = tarifas != null ? tarifas : new ArrayList<>();
+        this.lema = lema;
+        this.favoritoOrden = favoritoOrden;
     }
 
     public static SkuCategoriaBuilder builder() {
@@ -116,6 +132,8 @@ public class SkuCategoria {
         private Integer orden = 0;
         private Integer stockManual;
         private List<Tarifa> tarifas = new ArrayList<>();
+        private String lema;
+        private Integer favoritoOrden;
 
         public SkuCategoriaBuilder id(Long id) { this.id = id; return this; }
         public SkuCategoriaBuilder servicio(Servicio servicio) { this.servicio = servicio; return this; }
@@ -133,10 +151,12 @@ public class SkuCategoria {
         public SkuCategoriaBuilder orden(Integer orden) { this.orden = orden; return this; }
         public SkuCategoriaBuilder stockManual(Integer stockManual) { this.stockManual = stockManual; return this; }
         public SkuCategoriaBuilder tarifas(List<Tarifa> tarifas) { this.tarifas = tarifas; return this; }
+        public SkuCategoriaBuilder lema(String lema) { this.lema = lema; return this; }
+        public SkuCategoriaBuilder favoritoOrden(Integer favoritoOrden) { this.favoritoOrden = favoritoOrden; return this; }
 
         public SkuCategoria build() {
             return new SkuCategoria(id, servicio, codigo, nombre, modalidad, inicial, color, logoUrl,
-                    etiqueta, descripcion, incluye, recomendaciones, visible, orden, stockManual, tarifas);
+                    etiqueta, descripcion, incluye, recomendaciones, visible, orden, stockManual, tarifas, lema, favoritoOrden);
         }
     }
 }

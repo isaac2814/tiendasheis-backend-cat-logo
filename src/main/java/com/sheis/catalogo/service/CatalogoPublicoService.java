@@ -130,7 +130,9 @@ public class CatalogoPublicoService {
                     stock,
                     agotado,
                     base,
-                    planesDto
+                    planesDto,
+                    s.getLema(),
+                    s.getOrden() != null ? s.getOrden() : 0
             ));
         }
 
@@ -161,7 +163,9 @@ public class CatalogoPublicoService {
                     pricing.precioNormal(),
                     pricing.descuento(),
                     pricing.precio(),
-                    comboAgotado
+                    comboAgotado,
+                    c.getOrden() != null ? c.getOrden() : 0,
+                    c.getVisible() != null ? c.getVisible() : (c.getActivo() != null ? c.getActivo() : true)
             ));
         }
 
@@ -191,7 +195,7 @@ public class CatalogoPublicoService {
                 .map(h -> new HorarioDto(h.getDia(), h.getTexto()))
                 .toList();
 
-        // 6. Configuración suelta
+        // 6. Configuración suelta y textos
         String whatsapp = catalogoConfigRepository.findByClave("whatsapp")
                 .map(CatalogoConfig::getValor)
                 .orElse("57 300 000 0000");
@@ -200,6 +204,35 @@ public class CatalogoPublicoService {
                 .map(CatalogoConfig::getValor)
                 .orElse("");
 
+        CatalogoTextosDto textos = obtenerTextosConfig();
+
+        // 7. Lista de favoritos ordenada
+        record TempFav(String tipo, String ref, int orden) {}
+        List<TempFav> tempFavs = new ArrayList<>();
+
+        Set<String> publishedSvcCodes = serviciosDtos.stream().map(ServicioPublicoDto::id).collect(Collectors.toSet());
+        for (SkuCategoria s : visibles) {
+            if (s.getFavoritoOrden() != null && publishedSvcCodes.contains(s.getCodigo())) {
+                tempFavs.add(new TempFav("servicio", s.getCodigo(), s.getFavoritoOrden()));
+            }
+        }
+
+        Set<Long> publishedComboIds = combosDtos.stream()
+                .filter(ComboPublicoDto::visible)
+                .map(ComboPublicoDto::id)
+                .collect(Collectors.toSet());
+        for (Combo c : combosActivos) {
+            boolean visible = c.getVisible() != null ? c.getVisible() : (c.getActivo() != null ? c.getActivo() : true);
+            if (visible && c.getFavoritoOrden() != null && publishedComboIds.contains(c.getId())) {
+                tempFavs.add(new TempFav("combo", String.valueOf(c.getId()), c.getFavoritoOrden()));
+            }
+        }
+
+        tempFavs.sort(Comparator.comparingInt(TempFav::orden));
+        List<FavoritoDto> favoritosDtos = tempFavs.stream()
+                .map(f -> new FavoritoDto(f.tipo(), f.ref()))
+                .toList();
+
         return new CatalogoPublicoResponse(
                 serviciosDtos,
                 combosDtos,
@@ -207,7 +240,30 @@ public class CatalogoPublicoService {
                 metodosPagoDtos,
                 horarioDtos,
                 whatsapp,
-                sobreNosotros
+                sobreNosotros,
+                textos,
+                favoritosDtos
+        );
+    }
+
+    private String obtenerConfig(String snakeClave, String camelClave, String def, boolean permitirVacio) {
+        return catalogoConfigRepository.findByClave(snakeClave)
+                .or(() -> catalogoConfigRepository.findByClave(camelClave))
+                .map(CatalogoConfig::getValor)
+                .map(String::trim)
+                .filter(v -> permitirVacio || !v.isEmpty())
+                .orElse(def);
+    }
+
+    public CatalogoTextosDto obtenerTextosConfig() {
+        return new CatalogoTextosDto(
+                obtenerConfig("banner_texto", "bannerTexto", "Elige tu mejor servicio y empieza tu maratón", true),
+                obtenerConfig("titulo_favoritos", "tituloFavoritos", "Servicios favoritos", false),
+                obtenerConfig("titulo_servicios", "tituloServicios", "Servicios", false),
+                obtenerConfig("titulo_combos", "tituloCombos", "Combos", false),
+                obtenerConfig("menu_favoritos", "menuFavoritos", "Servicios favoritos", false),
+                obtenerConfig("menu_servicios", "menuServicios", "Servicios individuales", false),
+                obtenerConfig("menu_combos", "menuCombos", "Combos con descuento", false)
         );
     }
 

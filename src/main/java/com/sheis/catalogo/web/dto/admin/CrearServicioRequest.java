@@ -27,5 +27,14 @@ public record CrearServicioRequest(
         String logoUrl,
         Integer orden,
         Boolean visible,
-        Integer stockManual
-) {}
+        Integer stockManual,
+        @jakarta.validation.constraints.Size(max = 30, message = "El lema no puede superar los 30 caracteres")
+        String lema,
+        Integer favoritoOrden
+) {
+    public CrearServicioRequest(String nombre, String codigo, String modalidad, String inicial, String color,
+                                String etiqueta, String descripcion, List<String> incluye, List<String> recomendaciones,
+                                String logoUrl, Integer orden, Boolean visible, Integer stockManual) {
+        this(nombre, codigo, modalidad, inicial, color, etiqueta, descripcion, incluye, recomendaciones, logoUrl, orden, visible, stockManual, null, null);
+    }
+}

@@ -22,4 +22,10 @@ public interface SkuCategoriaRepository extends JpaRepository<SkuCategoria, Long
     List<SkuCategoria> findAllWithTarifas();
 
     List<SkuCategoria> findByCodigoIn(List<String> codigos);
+
+    List<SkuCategoria> findByFavoritoOrdenIsNotNullOrderByFavoritoOrdenAsc();
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("UPDATE SkuCategoria s SET s.favoritoOrden = null")
+    void clearAllFavoritoOrden();
 }

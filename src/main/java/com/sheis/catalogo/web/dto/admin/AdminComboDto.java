@@ -11,5 +11,14 @@ public record AdminComboDto(
         long precioNormal,
         long descuento,
         long precio,
-        boolean agotado
-) {}
+        boolean agotado,
+        Boolean visible,
+        String badge,
+        Integer favoritoOrden
+) {
+    public AdminComboDto(Long id, String etiqueta, Boolean activo, Integer orden,
+                         List<String> servicios, long precioNormal, long descuento,
+                         long precio, boolean agotado) {
+        this(id, etiqueta, activo, orden, servicios, precioNormal, descuento, precio, agotado, activo, etiqueta, null);
+    }
+}

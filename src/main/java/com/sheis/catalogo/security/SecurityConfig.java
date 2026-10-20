@@ -36,8 +36,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Bean
