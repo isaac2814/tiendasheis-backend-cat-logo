@@ -2,6 +2,7 @@ package com.sheis.catalogo.web;
 
 import com.sheis.catalogo.service.CatalogoAdminService;
 import com.sheis.catalogo.service.ImagenMetodoPagoStore;
+import com.sheis.catalogo.service.ImagenProductoStore;
 import com.sheis.catalogo.service.ImagenServicioStore;
 import com.sheis.catalogo.web.dto.admin.*;
 import io.swagger.v3.oas.annotations.Operation;
@@ -198,5 +199,134 @@ public class CatalogoAdminController {
     @Operation(summary = "Actualizar lista de favoritos ordenados", description = "Reasigna favorito_orden a servicios y combos en una sola transacción")
     public ResponseEntity<List<FavoritoDto>> actualizarFavoritos(@Valid @RequestBody List<FavoritoItemRequest> favoritos) {
         return ResponseEntity.ok(catalogoAdminService.actualizarFavoritos(favoritos));
+    }
+
+    // ==================== CATEGORÍAS DE PRODUCTO ====================
+
+    @GetMapping("/categorias-producto")
+    @Operation(summary = "Listar categorías de producto")
+    public ResponseEntity<List<AdminCategoriaProductoDto>> obtenerCategoriasProducto() {
+        return ResponseEntity.ok(catalogoAdminService.obtenerCategoriasProducto());
+    }
+
+    @PostMapping("/categorias-producto")
+    @Operation(summary = "Crear categoría de producto")
+    public ResponseEntity<AdminCategoriaProductoDto> crearCategoriaProducto(
+            @Valid @RequestBody CrearCategoriaProductoRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(catalogoAdminService.crearCategoriaProducto(req));
+    }
+
+    @PutMapping("/categorias-producto/{id}")
+    @Operation(summary = "Actualizar categoría de producto")
+    public ResponseEntity<AdminCategoriaProductoDto> actualizarCategoriaProducto(
+            @PathVariable Long id,
+            @Valid @RequestBody ActualizarCategoriaProductoRequest req) {
+        return ResponseEntity.ok(catalogoAdminService.actualizarCategoriaProducto(id, req));
+    }
+
+    @DeleteMapping("/categorias-producto/{id}")
+    @Operation(summary = "Eliminar categoría de producto", description = "Falla con 409 Conflict si tiene productos asociados")
+    public ResponseEntity<Void> eliminarCategoriaProducto(@PathVariable Long id) {
+        catalogoAdminService.eliminarCategoriaProducto(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ==================== PRODUCTOS FÍSICOS ====================
+
+    @GetMapping("/productos")
+    @Operation(summary = "Listar productos físicos")
+    public ResponseEntity<List<AdminProductoDto>> obtenerProductos() {
+        return ResponseEntity.ok(catalogoAdminService.obtenerProductos());
+    }
+
+    @PostMapping("/productos")
+    @Operation(summary = "Crear nuevo producto físico")
+    public ResponseEntity<AdminProductoDto> crearProducto(
+            @Valid @RequestBody CrearProductoRequest req) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(catalogoAdminService.crearProducto(req));
+    }
+
+    @PutMapping("/productos/{id}")
+    @Operation(summary = "Actualizar producto físico")
+    public ResponseEntity<AdminProductoDto> actualizarProducto(
+            @PathVariable Long id,
+            @Valid @RequestBody ActualizarProductoRequest req) {
+        return ResponseEntity.ok(catalogoAdminService.actualizarProducto(id, req));
+    }
+
+    @PatchMapping("/productos/{id}/visible")
+    @Operation(summary = "Cambiar visibilidad de un producto")
+    public ResponseEntity<Void> cambiarVisibleProducto(
+            @PathVariable Long id,
+            @Valid @RequestBody CambiarVisibleRequest req) {
+        catalogoAdminService.cambiarVisibleProducto(id, req.visible());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/productos/{id}")
+    @Operation(summary = "Eliminar producto físico")
+    public ResponseEntity<Void> eliminarProducto(@PathVariable Long id) {
+        catalogoAdminService.eliminarProducto(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ==================== VARIANTES ====================
+
+    @PutMapping("/productos/{id}/variantes")
+    @Operation(summary = "Reemplazar lista de variantes de un producto")
+    public ResponseEntity<List<AdminProductoVarianteDto>> reemplazarVariantes(
+            @PathVariable Long id,
+            @Valid @RequestBody List<AdminVarianteInputDto> variantes) {
+        return ResponseEntity.ok(catalogoAdminService.reemplazarVariantes(id, variantes));
+    }
+
+    @PatchMapping("/productos/{productoId}/variantes/{varianteId}/stock")
+    @Operation(summary = "Cambiar stock de una variante de producto")
+    public ResponseEntity<Void> cambiarStockVariante(
+            @PathVariable Long productoId,
+            @PathVariable Long varianteId,
+            @Valid @RequestBody CambiarStockRequest req) {
+        catalogoAdminService.cambiarStockVariante(productoId, varianteId, req.stock());
+        return ResponseEntity.noContent().build();
+    }
+
+    // ==================== IMÁGENES DE PRODUCTO ====================
+
+    @PostMapping(value = "/productos/{id}/imagenes", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Subir imagen para producto físico", description = "Máximo 6 imágenes por producto, hasta 512 KB")
+    public ResponseEntity<ImagenProductoStore.ImagenGuardada> subirImagenProducto(
+            @PathVariable Long id,
+            @RequestParam(value = "archivo", required = false) MultipartFile archivo,
+            @RequestParam(value = "file", required = false) MultipartFile fileFallback,
+            @RequestParam(value = "orden", required = false) Integer orden
+    ) throws IOException {
+        MultipartFile file = archivo != null ? archivo : fileFallback;
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("No se proporcionó ningún archivo de imagen");
+        }
+        ImagenProductoStore.ImagenGuardada guardada = catalogoAdminService.guardarImagenProducto(
+                id,
+                file.getContentType(),
+                file.getBytes(),
+                orden
+        );
+        return ResponseEntity.ok(guardada);
+    }
+
+    @DeleteMapping("/productos/{id}/imagenes/{imagenId}")
+    @Operation(summary = "Eliminar imagen de un producto físico")
+    public ResponseEntity<Void> eliminarImagenProducto(
+            @PathVariable Long id,
+            @PathVariable Long imagenId) {
+        catalogoAdminService.eliminarImagenProducto(id, imagenId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/productos/{id}/imagenes/orden")
+    @Operation(summary = "Reordenar imágenes de un producto físico")
+    public ResponseEntity<List<ImagenProductoStore.ImagenGuardada>> reordenarImagenesProducto(
+            @PathVariable Long id,
+            @Valid @RequestBody ReordenarImagenesRequest req) {
+        return ResponseEntity.ok(catalogoAdminService.reordenarImagenesProducto(id, req.imagenesIds()));
     }
 }

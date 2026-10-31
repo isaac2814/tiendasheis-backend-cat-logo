@@ -3,6 +3,7 @@ package com.sheis.catalogo.web;
 import com.sheis.catalogo.exception.ResourceNotFoundException;
 import com.sheis.catalogo.service.CatalogoPublicoService;
 import com.sheis.catalogo.service.ImagenMetodoPagoStore;
+import com.sheis.catalogo.service.ImagenProductoStore;
 import com.sheis.catalogo.service.ImagenServicioStore;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -79,6 +80,21 @@ public class CatalogoPublicoController {
     public ResponseEntity<byte[]> obtenerImagenMetodoPago(@PathVariable String id) {
         ImagenMetodoPagoStore.ImagenData imagen = catalogoPublicoService.obtenerImagenMetodoPago(id)
                 .orElseThrow(() -> new ResourceNotFoundException("No se encontró imagen para el método de pago: " + id));
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000, immutable")
+                .header("X-Content-Type-Options", "nosniff")
+                .contentType(MediaType.parseMediaType(imagen.contentType()))
+                .body(imagen.datos());
+    }
+
+    @GetMapping("/productos/{productoId}/imagenes/{imagenId}")
+    @Operation(summary = "Obtiene una imagen de un producto físico", description = "Devuelve los bytes de la imagen con cabeceras de caché inmutable")
+    public ResponseEntity<byte[]> obtenerImagenProducto(
+            @PathVariable Long productoId,
+            @PathVariable Long imagenId) {
+        ImagenProductoStore.ImagenData imagen = catalogoPublicoService.obtenerImagenProducto(productoId, imagenId)
+                .orElseThrow(() -> new ResourceNotFoundException("No se encontró imagen " + imagenId + " para el producto: " + productoId));
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000, immutable")

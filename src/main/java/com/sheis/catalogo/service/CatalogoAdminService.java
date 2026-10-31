@@ -36,6 +36,11 @@ public class CatalogoAdminService {
     private final StockProvider stockProvider;
     private final ImagenServicioStore imagenServicioStore;
     private final ImagenMetodoPagoStore imagenMetodoPagoStore;
+    private final CategoriaProductoRepository categoriaProductoRepository;
+    private final ProductoRepository productoRepository;
+    private final ProductoVarianteRepository productoVarianteRepository;
+    private final ProductoImagenRepository productoImagenRepository;
+    private final ImagenProductoStore imagenProductoStore;
 
     public CatalogoAdminService(SkuCategoriaRepository skuCategoriaRepository,
                                 ServicioRepository servicioRepository,
@@ -48,7 +53,12 @@ public class CatalogoAdminService {
                                 PricingService pricingService,
                                 StockProvider stockProvider,
                                 ImagenServicioStore imagenServicioStore,
-                                ImagenMetodoPagoStore imagenMetodoPagoStore) {
+                                ImagenMetodoPagoStore imagenMetodoPagoStore,
+                                CategoriaProductoRepository categoriaProductoRepository,
+                                ProductoRepository productoRepository,
+                                ProductoVarianteRepository productoVarianteRepository,
+                                ProductoImagenRepository productoImagenRepository,
+                                ImagenProductoStore imagenProductoStore) {
         this.skuCategoriaRepository = skuCategoriaRepository;
         this.servicioRepository = servicioRepository;
         this.tarifaRepository = tarifaRepository;
@@ -61,6 +71,11 @@ public class CatalogoAdminService {
         this.stockProvider = stockProvider;
         this.imagenServicioStore = imagenServicioStore;
         this.imagenMetodoPagoStore = imagenMetodoPagoStore;
+        this.categoriaProductoRepository = categoriaProductoRepository;
+        this.productoRepository = productoRepository;
+        this.productoVarianteRepository = productoVarianteRepository;
+        this.productoImagenRepository = productoImagenRepository;
+        this.imagenProductoStore = imagenProductoStore;
     }
 
     @Transactional(readOnly = true)
@@ -171,7 +186,25 @@ public class CatalogoAdminService {
                 .map(f -> new FavoritoDto(f.tipo(), f.ref()))
                 .toList();
 
-        return new AdminCatalogoSnapshot(serviciosDtos, combosDtos, descuentos, ajustes, favoritos);
+        // Categorías de producto
+        List<CategoriaProducto> categoriasEnt = categoriaProductoRepository.findAllByOrderByOrdenAscIdAsc();
+        List<AdminCategoriaProductoDto> categoriasProducto = categoriasEnt.stream()
+                .map(cp -> new AdminCategoriaProductoDto(
+                        cp.getId(),
+                        cp.getNombre(),
+                        cp.getOrden(),
+                        cp.getVisible(),
+                        productoRepository.countByCategoriaId(cp.getId())
+                ))
+                .toList();
+
+        // Productos físicos
+        List<Producto> productosEnt = productoRepository.findAllByOrderByOrdenAscIdAsc();
+        List<AdminProductoDto> productos = productosEnt.stream()
+                .map(this::mapToAdminProductoDto)
+                .toList();
+
+        return new AdminCatalogoSnapshot(serviciosDtos, combosDtos, descuentos, ajustes, favoritos, categoriasProducto, productos);
     }
 
     // ==================== SERVICIOS ====================
@@ -604,7 +637,14 @@ public class CatalogoAdminService {
                 obtenerConfig("titulo_combos", "tituloCombos", "Combos", false),
                 obtenerConfig("menu_favoritos", "menuFavoritos", "Servicios favoritos", false),
                 obtenerConfig("menu_servicios", "menuServicios", "Servicios individuales", false),
-                obtenerConfig("menu_combos", "menuCombos", "Combos con descuento", false)
+                obtenerConfig("menu_combos", "menuCombos", "Combos con descuento", false),
+                obtenerConfig("titulo_tecnologia", "tituloTecnologia", "Tecnología", false),
+                obtenerConfig("menu_tecnologia", "menuTecnologia", "Tecnología", false),
+                obtenerConfig("subtitulo_tecnologia", "subtituloTecnologia", "Audífonos, forros, cargadores y más. Envíos a todo el país.", true),
+                obtenerConfig("ciudad_domicilio", "ciudadDomicilio", "", true),
+                obtenerConfig("texto_domicilio", "textoDomicilio", "Te lo llevamos a la puerta de tu casa.", true),
+                obtenerConfig("texto_envio_nacional", "textoEnvioNacional", "Por transportadora a cualquier ciudad. El costo te lo confirmamos por WhatsApp.", true),
+                obtenerConfig("nota_tecnologia", "notaTecnologia", "Pide por WhatsApp. Domicilio en tu ciudad o envío nacional; el costo del envío te lo confirmamos en el chat.", true)
         );
 
         return new AdminAjustesDto(whatsapp, sobreNosotros, horarios, metodos, textos);
@@ -669,6 +709,13 @@ public class CatalogoAdminService {
             guardarTextoConfig("menu_favoritos", "menuFavoritos", dto.textos().menuFavoritos(), 30, "El texto del menú de favoritos");
             guardarTextoConfig("menu_servicios", "menuServicios", dto.textos().menuServicios(), 30, "El texto del menú de servicios");
             guardarTextoConfig("menu_combos", "menuCombos", dto.textos().menuCombos(), 30, "El texto del menú de combos");
+            guardarTextoConfig("titulo_tecnologia", "tituloTecnologia", dto.textos().tituloTecnologia(), 40, "El título de tecnología");
+            guardarTextoConfig("menu_tecnologia", "menuTecnologia", dto.textos().menuTecnologia(), 30, "El texto del menú de tecnología");
+            guardarTextoConfig("subtitulo_tecnologia", "subtituloTecnologia", dto.textos().subtituloTecnologia(), 120, "El subtítulo de tecnología");
+            guardarTextoConfig("ciudad_domicilio", "ciudadDomicilio", dto.textos().ciudadDomicilio(), 50, "La ciudad de domicilio");
+            guardarTextoConfig("texto_domicilio", "textoDomicilio", dto.textos().textoDomicilio(), 120, "El texto de domicilio");
+            guardarTextoConfig("texto_envio_nacional", "textoEnvioNacional", dto.textos().textoEnvioNacional(), 120, "El texto de envío nacional");
+            guardarTextoConfig("nota_tecnologia", "notaTecnologia", dto.textos().notaTecnologia(), 200, "La nota de tecnología");
         }
 
         return obtenerAjustes();
@@ -842,5 +889,442 @@ public class CatalogoAdminService {
             candidato = slug + "-" + i++;
         }
         return candidato;
+    }
+
+    // ==================== PRODUCTOS Y CATEGORÍAS ====================
+
+    private AdminProductoDto mapToAdminProductoDto(Producto p) {
+        List<AdminProductoImagenDto> imagenes = productoImagenRepository.findByProductoIdOrderByOrdenAscIdAsc(p.getId()).stream()
+                .map(img -> new AdminProductoImagenDto(
+                        img.getId(),
+                        "/api/public/productos/" + p.getId() + "/imagenes/" + img.getId() + "?v=" + img.getActualizadoEn().toEpochMilli(),
+                        img.getOrden()
+                ))
+                .toList();
+
+        List<AdminProductoVarianteDto> variantes = productoVarianteRepository.findByProductoIdOrderByOrdenAscIdAsc(p.getId()).stream()
+                .map(v -> new AdminProductoVarianteDto(
+                        v.getId(),
+                        v.getNombre(),
+                        v.getSku(),
+                        v.getPrecio(),
+                        v.getStock(),
+                        v.getActiva(),
+                        v.getOrden()
+                ))
+                .toList();
+
+        return new AdminProductoDto(
+                p.getId(),
+                p.getCategoria().getId(),
+                p.getCategoria().getNombre(),
+                p.getNombre(),
+                p.getDescripcion(),
+                p.getIncluye(),
+                p.getGarantia(),
+                p.getLema(),
+                p.getEtiquetaVariante(),
+                p.getOrden(),
+                p.getVisible(),
+                imagenes,
+                variantes
+        );
+    }
+
+    // ==================== CATEGORÍAS DE PRODUCTO ====================
+
+    @Transactional(readOnly = true)
+    public List<AdminCategoriaProductoDto> obtenerCategoriasProducto() {
+        return categoriaProductoRepository.findAllByOrderByOrdenAscIdAsc().stream()
+                .map(cp -> new AdminCategoriaProductoDto(
+                        cp.getId(),
+                        cp.getNombre(),
+                        cp.getOrden(),
+                        cp.getVisible(),
+                        productoRepository.countByCategoriaId(cp.getId())
+                ))
+                .toList();
+    }
+
+    @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
+    public AdminCategoriaProductoDto crearCategoriaProducto(CrearCategoriaProductoRequest req) {
+        String nombre = req.nombre() != null ? req.nombre().trim() : "";
+        if (nombre.isBlank()) {
+            throw new BadRequestException("El nombre de la categoría es obligatorio");
+        }
+        if (nombre.length() > 40) {
+            throw new BadRequestException("El nombre de la categoría no puede superar los 40 caracteres");
+        }
+        if (categoriaProductoRepository.existsByNombreIgnoreCase(nombre)) {
+            throw new ResourceConflictException("Ya existe una categoría con el nombre '" + nombre + "'");
+        }
+
+        CategoriaProducto cp = new CategoriaProducto(
+                nombre,
+                req.orden() != null ? req.orden() : 1,
+                req.visible() != null ? req.visible() : true
+        );
+        CategoriaProducto guardada = categoriaProductoRepository.save(cp);
+        return new AdminCategoriaProductoDto(guardada.getId(), guardada.getNombre(), guardada.getOrden(), guardada.getVisible(), 0L);
+    }
+
+    @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
+    public AdminCategoriaProductoDto actualizarCategoriaProducto(Long id, ActualizarCategoriaProductoRequest req) {
+        CategoriaProducto cp = categoriaProductoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Categoría no encontrada con ID: " + id));
+
+        String nombre = req.nombre() != null ? req.nombre().trim() : "";
+        if (nombre.isBlank()) {
+            throw new BadRequestException("El nombre de la categoría es obligatorio");
+        }
+        if (nombre.length() > 40) {
+            throw new BadRequestException("El nombre de la categoría no puede superar los 40 caracteres");
+        }
+        if (categoriaProductoRepository.existsByNombreIgnoreCaseAndIdNot(nombre, id)) {
+            throw new ResourceConflictException("Ya existe otra categoría con el nombre '" + nombre + "'");
+        }
+
+        cp.setNombre(nombre);
+        if (req.orden() != null) {
+            cp.setOrden(req.orden());
+        }
+        if (req.visible() != null) {
+            cp.setVisible(req.visible());
+        }
+        cp.setActualizadoEn(Instant.now());
+        CategoriaProducto guardada = categoriaProductoRepository.save(cp);
+        long count = productoRepository.countByCategoriaId(guardada.getId());
+        return new AdminCategoriaProductoDto(guardada.getId(), guardada.getNombre(), guardada.getOrden(), guardada.getVisible(), count);
+    }
+
+    @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
+    public void eliminarCategoriaProducto(Long id) {
+        CategoriaProducto cp = categoriaProductoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Categoría no encontrada con ID: " + id));
+
+        long count = productoRepository.countByCategoriaId(id);
+        if (count > 0) {
+            throw new ResourceConflictException("No se puede eliminar la categoría porque tiene " + count + " producto(s) asociado(s)");
+        }
+
+        categoriaProductoRepository.delete(cp);
+    }
+
+    // ==================== PRODUCTOS FÍSICOS ====================
+
+    @Transactional(readOnly = true)
+    public List<AdminProductoDto> obtenerProductos() {
+        return productoRepository.findAllByOrderByOrdenAscIdAsc().stream()
+                .map(this::mapToAdminProductoDto)
+                .toList();
+    }
+
+    @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
+    public AdminProductoDto crearProducto(CrearProductoRequest req) {
+        CategoriaProducto categoria = categoriaProductoRepository.findById(req.categoriaId())
+                .orElseThrow(() -> new BadRequestException("La categoría con ID " + req.categoriaId() + " no existe"));
+
+        String nombre = req.nombre() != null ? req.nombre().trim() : "";
+        if (nombre.isBlank()) {
+            throw new BadRequestException("El nombre del producto es obligatorio");
+        }
+        if (nombre.length() > 80) {
+            throw new BadRequestException("El nombre del producto no puede superar los 80 caracteres");
+        }
+
+        boolean visible = req.visible() != null ? req.visible() : true;
+
+        List<AdminVarianteInputDto> variantesReq = req.variantes() != null ? req.variantes() : List.of();
+        if (visible && (variantesReq.isEmpty() || variantesReq.stream().noneMatch(v -> v.activa() == null || Boolean.TRUE.equals(v.activa())))) {
+            throw new BadRequestException("No se puede publicar un producto sin al menos una variante activa");
+        }
+
+        String lema = req.lema() != null ? req.lema().trim() : null;
+        if (lema != null && lema.length() > 30) {
+            throw new BadRequestException("El lema del producto no puede superar los 30 caracteres");
+        }
+
+        String etiquetaVariante = req.etiquetaVariante() != null ? req.etiquetaVariante().trim() : "Opción";
+        if (etiquetaVariante.length() > 30) {
+            throw new BadRequestException("La etiqueta de variante no puede superar los 30 caracteres");
+        }
+
+        Producto p = new Producto(
+                categoria,
+                nombre,
+                req.descripcion() != null ? req.descripcion().trim() : null,
+                req.incluye() != null ? req.incluye().trim() : null,
+                req.garantia() != null ? req.garantia().trim() : null,
+                lema,
+                etiquetaVariante,
+                req.orden() != null ? req.orden() : 1,
+                visible
+        );
+        Producto guardado = productoRepository.save(p);
+
+        if (!variantesReq.isEmpty()) {
+            guardarVariantesInterno(guardado, variantesReq);
+        }
+
+        return mapToAdminProductoDto(guardado);
+    }
+
+    @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
+    public AdminProductoDto actualizarProducto(Long id, ActualizarProductoRequest req) {
+        Producto p = productoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado con ID: " + id));
+
+        CategoriaProducto categoria = categoriaProductoRepository.findById(req.categoriaId())
+                .orElseThrow(() -> new BadRequestException("La categoría con ID " + req.categoriaId() + " no existe"));
+
+        String nombre = req.nombre() != null ? req.nombre().trim() : "";
+        if (nombre.isBlank()) {
+            throw new BadRequestException("El nombre del producto es obligatorio");
+        }
+        if (nombre.length() > 80) {
+            throw new BadRequestException("El nombre del producto no puede superar los 80 caracteres");
+        }
+
+        boolean nuevoVisible = req.visible() != null ? req.visible() : p.getVisible();
+        if (nuevoVisible) {
+            boolean tieneActiva = productoVarianteRepository.findByProductoIdAndActivaTrueOrderByOrdenAscIdAsc(id)
+                    .stream().findAny().isPresent();
+            if (!tieneActiva) {
+                throw new BadRequestException("No se puede publicar un producto sin al menos una variante activa");
+            }
+        }
+
+        String lema = req.lema() != null ? req.lema().trim() : null;
+        if (lema != null && lema.length() > 30) {
+            throw new BadRequestException("El lema del producto no puede superar los 30 caracteres");
+        }
+
+        String etiquetaVariante = req.etiquetaVariante() != null ? req.etiquetaVariante().trim() : "Opción";
+        if (etiquetaVariante.length() > 30) {
+            throw new BadRequestException("La etiqueta de variante no puede superar los 30 caracteres");
+        }
+
+        p.setCategoria(categoria);
+        p.setNombre(nombre);
+        p.setDescripcion(req.descripcion() != null ? req.descripcion().trim() : null);
+        p.setIncluye(req.incluye() != null ? req.incluye().trim() : null);
+        p.setGarantia(req.garantia() != null ? req.garantia().trim() : null);
+        p.setLema(lema);
+        p.setEtiquetaVariante(etiquetaVariante);
+        if (req.orden() != null) {
+            p.setOrden(req.orden());
+        }
+        p.setVisible(nuevoVisible);
+        p.setActualizadoEn(Instant.now());
+
+        Producto guardado = productoRepository.save(p);
+        return mapToAdminProductoDto(guardado);
+    }
+
+    @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
+    public void cambiarVisibleProducto(Long id, boolean visible) {
+        Producto p = productoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado con ID: " + id));
+
+        if (visible) {
+            boolean tieneActiva = productoVarianteRepository.findByProductoIdAndActivaTrueOrderByOrdenAscIdAsc(id)
+                    .stream().findAny().isPresent();
+            if (!tieneActiva) {
+                throw new BadRequestException("No se puede publicar un producto sin al menos una variante activa");
+            }
+        }
+
+        p.setVisible(visible);
+        p.setActualizadoEn(Instant.now());
+        productoRepository.save(p);
+    }
+
+    @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
+    public void eliminarProducto(Long id) {
+        Producto p = productoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado con ID: " + id));
+        productoRepository.delete(p);
+    }
+
+    // ==================== VARIANTES ====================
+
+    @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
+    public List<AdminProductoVarianteDto> reemplazarVariantes(Long productoId, List<AdminVarianteInputDto> variantesReq) {
+        Producto p = productoRepository.findById(productoId)
+                .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado con ID: " + productoId));
+
+        if (variantesReq == null || variantesReq.isEmpty()) {
+            if (Boolean.TRUE.equals(p.getVisible())) {
+                throw new BadRequestException("Un producto visible no puede quedarse sin variantes activas");
+            }
+            productoVarianteRepository.deleteAll(p.getVariantes());
+            p.getVariantes().clear();
+            return List.of();
+        }
+
+        if (Boolean.TRUE.equals(p.getVisible())) {
+            boolean algunaActiva = variantesReq.stream()
+                    .anyMatch(v -> v.activa() == null || Boolean.TRUE.equals(v.activa()));
+            if (!algunaActiva) {
+                throw new BadRequestException("Un producto visible no puede quedarse sin al menos una variante activa");
+            }
+        }
+
+        return guardarVariantesInterno(p, variantesReq);
+    }
+
+    private List<AdminProductoVarianteDto> guardarVariantesInterno(Producto producto, List<AdminVarianteInputDto> variantesReq) {
+        Set<String> seenNames = new HashSet<>();
+        int orden = 1;
+
+        List<ProductoVariante> actuales = productoVarianteRepository.findByProductoIdOrderByOrdenAscIdAsc(producto.getId());
+        Map<Long, ProductoVariante> actualMap = actuales.stream().collect(Collectors.toMap(ProductoVariante::getId, v -> v));
+        List<ProductoVariante> aGuardar = new ArrayList<>();
+        Set<Long> conservadasIds = new HashSet<>();
+
+        for (AdminVarianteInputDto input : variantesReq) {
+            String vNombre = input.nombre() != null ? input.nombre().trim() : "";
+            if (vNombre.isBlank()) {
+                throw new BadRequestException("El nombre de la variante es obligatorio");
+            }
+            if (!seenNames.add(vNombre.toLowerCase())) {
+                throw new BadRequestException("No puede haber variantes con el mismo nombre en el producto: '" + vNombre + "'");
+            }
+
+            if (input.precio() == null || input.precio().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BadRequestException("El precio de la variante debe ser mayor a 0");
+            }
+            int stock = input.stock() != null ? input.stock() : 0;
+            if (stock < 0) {
+                throw new BadRequestException("El stock de la variante no puede ser negativo");
+            }
+
+            String sku = input.sku() != null ? input.sku().trim() : "";
+            if (sku.isBlank()) {
+                sku = generarSkuVariante(producto.getNombre(), vNombre, input.id());
+            } else {
+                if (sku.length() > 50) {
+                    throw new BadRequestException("El SKU no puede superar los 50 caracteres");
+                }
+                if (input.id() != null) {
+                    if (productoVarianteRepository.existsBySkuIgnoreCaseAndIdNot(sku, input.id())) {
+                        throw new ResourceConflictException("El SKU '" + sku + "' ya está registrado en otra variante");
+                    }
+                } else {
+                    if (productoVarianteRepository.existsBySkuIgnoreCase(sku)) {
+                        throw new ResourceConflictException("El SKU '" + sku + "' ya está registrado");
+                    }
+                }
+            }
+
+            ProductoVariante variante;
+            if (input.id() != null && actualMap.containsKey(input.id())) {
+                variante = actualMap.get(input.id());
+                variante.setNombre(vNombre);
+                variante.setSku(sku);
+                variante.setPrecio(input.precio());
+                variante.setStock(stock);
+                variante.setActiva(input.activa() != null ? input.activa() : true);
+                variante.setOrden(input.orden() != null ? input.orden() : orden++);
+                variante.setActualizadoEn(Instant.now());
+                conservadasIds.add(input.id());
+            } else {
+                variante = new ProductoVariante(
+                        producto,
+                        vNombre,
+                        sku,
+                        input.precio(),
+                        stock,
+                        input.activa() != null ? input.activa() : true,
+                        input.orden() != null ? input.orden() : orden++
+                );
+            }
+            aGuardar.add(variante);
+        }
+
+        // Eliminar las que ya no están en la lista
+        for (ProductoVariante act : actuales) {
+            if (!conservadasIds.contains(act.getId())) {
+                producto.getVariantes().remove(act);
+                productoVarianteRepository.delete(act);
+            }
+        }
+
+        productoVarianteRepository.saveAllAndFlush(aGuardar);
+
+        return productoVarianteRepository.findByProductoIdOrderByOrdenAscIdAsc(producto.getId()).stream()
+                .map(v -> new AdminProductoVarianteDto(
+                        v.getId(),
+                        v.getNombre(),
+                        v.getSku(),
+                        v.getPrecio(),
+                        v.getStock(),
+                        v.getActiva(),
+                        v.getOrden()
+                ))
+                .toList();
+    }
+
+    @Transactional
+    @CacheEvict(value = "catalogo", allEntries = true)
+    public void cambiarStockVariante(Long productoId, Long varianteId, Integer stock) {
+        if (stock == null || stock < 0) {
+            throw new BadRequestException("El stock debe ser un número entero mayor o igual a 0");
+        }
+        ProductoVariante pv = productoVarianteRepository.findById(varianteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Variante no encontrada con ID: " + varianteId));
+        if (!pv.getProducto().getId().equals(productoId)) {
+            throw new BadRequestException("La variante " + varianteId + " no pertenece al producto " + productoId);
+        }
+        pv.setStock(stock);
+        pv.setActualizadoEn(Instant.now());
+        productoVarianteRepository.save(pv);
+    }
+
+    private String generarSkuVariante(String productoNombre, String varianteNombre, Long varianteId) {
+        String pPart = slugPart(productoNombre, 3);
+        String vPart = slugPart(varianteNombre, 3);
+        String base = pPart + "-" + vPart;
+
+        String sku = base + "-" + (varianteId != null ? varianteId : (System.currentTimeMillis() % 100000));
+        int i = 1;
+        while (productoVarianteRepository.existsBySkuIgnoreCase(sku)) {
+            sku = base + "-" + (System.currentTimeMillis() % 100000) + "-" + i++;
+        }
+        return sku.toUpperCase();
+    }
+
+    private String slugPart(String text, int len) {
+        if (text == null || text.isBlank()) return "VAR";
+        String normalized = Normalizer.normalize(text, Normalizer.Form.NFD)
+                .replaceAll("\\p{InCombiningDiacriticalMarks}+", "")
+                .replaceAll("[^a-zA-Z0-9]", "")
+                .toUpperCase();
+        return normalized.length() <= len ? normalized : normalized.substring(0, len);
+    }
+
+    // ==================== IMÁGENES DE PRODUCTO ====================
+
+    @Transactional
+    public ImagenProductoStore.ImagenGuardada guardarImagenProducto(Long productoId, String contentType, byte[] bytes, Integer orden) {
+        return imagenProductoStore.guardar(productoId, contentType, bytes, orden);
+    }
+
+    @Transactional
+    public void eliminarImagenProducto(Long productoId, Long imagenId) {
+        imagenProductoStore.eliminar(productoId, imagenId);
+    }
+
+    @Transactional
+    public List<ImagenProductoStore.ImagenGuardada> reordenarImagenesProducto(Long productoId, List<Long> imagenesIds) {
+        return imagenProductoStore.reordenar(productoId, imagenesIds);
     }
 }

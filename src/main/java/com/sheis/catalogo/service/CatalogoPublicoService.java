@@ -4,7 +4,6 @@ import com.sheis.catalogo.domain.*;
 import com.sheis.catalogo.repository.*;
 import com.sheis.catalogo.stock.StockProvider;
 import com.sheis.catalogo.web.dto.publico.*;
-import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +25,11 @@ public class CatalogoPublicoService {
     private final StockProvider stockProvider;
     private final ImagenServicioStore imagenServicioStore;
     private final ImagenMetodoPagoStore imagenMetodoPagoStore;
+    private final CategoriaProductoRepository categoriaProductoRepository;
+    private final ProductoRepository productoRepository;
+    private final ProductoVarianteRepository productoVarianteRepository;
+    private final ProductoImagenRepository productoImagenRepository;
+    private final ImagenProductoStore imagenProductoStore;
 
     public CatalogoPublicoService(SkuCategoriaRepository skuCategoriaRepository,
                                   ComboRepository comboRepository,
@@ -36,7 +40,12 @@ public class CatalogoPublicoService {
                                   PricingService pricingService,
                                   StockProvider stockProvider,
                                   ImagenServicioStore imagenServicioStore,
-                                  ImagenMetodoPagoStore imagenMetodoPagoStore) {
+                                  ImagenMetodoPagoStore imagenMetodoPagoStore,
+                                  CategoriaProductoRepository categoriaProductoRepository,
+                                  ProductoRepository productoRepository,
+                                  ProductoVarianteRepository productoVarianteRepository,
+                                  ProductoImagenRepository productoImagenRepository,
+                                  ImagenProductoStore imagenProductoStore) {
         this.skuCategoriaRepository = skuCategoriaRepository;
         this.comboRepository = comboRepository;
         this.descuentoComboRepository = descuentoComboRepository;
@@ -47,6 +56,11 @@ public class CatalogoPublicoService {
         this.stockProvider = stockProvider;
         this.imagenServicioStore = imagenServicioStore;
         this.imagenMetodoPagoStore = imagenMetodoPagoStore;
+        this.categoriaProductoRepository = categoriaProductoRepository;
+        this.productoRepository = productoRepository;
+        this.productoVarianteRepository = productoVarianteRepository;
+        this.productoImagenRepository = productoImagenRepository;
+        this.imagenProductoStore = imagenProductoStore;
     }
 
     @Transactional(readOnly = true)
@@ -233,6 +247,59 @@ public class CatalogoPublicoService {
                 .map(f -> new FavoritoDto(f.tipo(), f.ref()))
                 .toList();
 
+        // 8. Tecnología (Categorías y Productos físicos)
+        List<CategoriaProductoPublicoDto> catPubDtos = categoriaProductoRepository.findByVisibleTrueOrderByOrdenAscIdAsc().stream()
+                .map(cp -> new CategoriaProductoPublicoDto(cp.getId(), cp.getNombre(), cp.getOrden()))
+                .toList();
+
+        List<Producto> productosVisibles = productoRepository.findByVisibleTrueOrderByOrdenAscIdAsc();
+        List<ProductoPublicoDto> prodPubDtos = new ArrayList<>();
+
+        for (Producto p : productosVisibles) {
+            List<ProductoVariante> variantesActivas = productoVarianteRepository
+                    .findByProductoIdAndActivaTrueOrderByOrdenAscIdAsc(p.getId());
+
+            if (variantesActivas.isEmpty()) {
+                continue;
+            }
+
+            List<ProductoImagen> imagenes = productoImagenRepository.findByProductoIdOrderByOrdenAscIdAsc(p.getId());
+            List<String> imgUrls = imagenes.stream()
+                    .map(img -> "/api/public/productos/" + p.getId() + "/imagenes/" + img.getId() + "?v=" + img.getActualizadoEn().toEpochMilli())
+                    .toList();
+
+            List<VariantePublicoDto> varDtos = variantesActivas.stream()
+                    .map(v -> new VariantePublicoDto(
+                            v.getId(),
+                            v.getNombre(),
+                            v.getPrecio().longValue(),
+                            v.getStock()
+                    ))
+                    .toList();
+
+            List<String> incluyeList = (p.getIncluye() == null || p.getIncluye().isBlank())
+                    ? List.of()
+                    : Arrays.stream(p.getIncluye().split("\\r?\\n"))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .toList();
+
+            prodPubDtos.add(new ProductoPublicoDto(
+                    p.getId(),
+                    p.getNombre(),
+                    p.getCategoria().getId(),
+                    p.getLema(),
+                    p.getDescripcion() != null ? p.getDescripcion() : "",
+                    incluyeList,
+                    p.getGarantia(),
+                    p.getEtiquetaVariante(),
+                    imgUrls,
+                    varDtos
+            ));
+        }
+
+        TecnologiaPublicoDto tecnologia = new TecnologiaPublicoDto(catPubDtos, prodPubDtos);
+
         return new CatalogoPublicoResponse(
                 serviciosDtos,
                 combosDtos,
@@ -242,7 +309,8 @@ public class CatalogoPublicoService {
                 whatsapp,
                 sobreNosotros,
                 textos,
-                favoritosDtos
+                favoritosDtos,
+                tecnologia
         );
     }
 
@@ -263,7 +331,14 @@ public class CatalogoPublicoService {
                 obtenerConfig("titulo_combos", "tituloCombos", "Combos", false),
                 obtenerConfig("menu_favoritos", "menuFavoritos", "Servicios favoritos", false),
                 obtenerConfig("menu_servicios", "menuServicios", "Servicios individuales", false),
-                obtenerConfig("menu_combos", "menuCombos", "Combos con descuento", false)
+                obtenerConfig("menu_combos", "menuCombos", "Combos con descuento", false),
+                obtenerConfig("titulo_tecnologia", "tituloTecnologia", "Tecnología", false),
+                obtenerConfig("menu_tecnologia", "menuTecnologia", "Tecnología", false),
+                obtenerConfig("subtitulo_tecnologia", "subtituloTecnologia", "Audífonos, forros, cargadores y más. Envíos a todo el país.", true),
+                obtenerConfig("ciudad_domicilio", "ciudadDomicilio", "", true),
+                obtenerConfig("texto_domicilio", "textoDomicilio", "Te lo llevamos a la puerta de tu casa.", true),
+                obtenerConfig("texto_envio_nacional", "textoEnvioNacional", "Por transportadora a cualquier ciudad. El costo te lo confirmamos por WhatsApp.", true),
+                obtenerConfig("nota_tecnologia", "notaTecnologia", "Pide por WhatsApp. Domicilio en tu ciudad o envío nacional; el costo del envío te lo confirmamos en el chat.", true)
         );
     }
 
@@ -275,5 +350,10 @@ public class CatalogoPublicoService {
     @Transactional(readOnly = true)
     public Optional<ImagenMetodoPagoStore.ImagenData> obtenerImagenMetodoPago(String id) {
         return imagenMetodoPagoStore.obtener(id);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<ImagenProductoStore.ImagenData> obtenerImagenProducto(Long productoId, Long imagenId) {
+        return imagenProductoStore.obtener(productoId, imagenId);
     }
 }
