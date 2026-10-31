@@ -10,6 +10,7 @@ public record ActualizarProductoRequest(
         @NotBlank(message = "El nombre del producto es obligatorio")
         @Size(max = 80, message = "El nombre del producto no puede superar los 80 caracteres")
         String nombre,
+        @Size(max = 2000, message = "La descripción no puede superar los 2000 caracteres")
         String descripcion,
         String incluye,
         @Size(max = 80, message = "La garantía no puede superar los 80 caracteres")

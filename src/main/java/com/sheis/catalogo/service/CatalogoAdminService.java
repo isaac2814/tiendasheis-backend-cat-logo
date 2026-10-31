@@ -1053,10 +1053,12 @@ public class CatalogoAdminService {
             throw new BadRequestException("La etiqueta de variante no puede superar los 30 caracteres");
         }
 
+        String descripcion = normalizarDescripcion(req.descripcion());
+
         Producto p = new Producto(
                 categoria,
                 nombre,
-                req.descripcion() != null ? req.descripcion().trim() : null,
+                descripcion,
                 req.incluye() != null ? req.incluye().trim() : null,
                 req.garantia() != null ? req.garantia().trim() : null,
                 lema,
@@ -1111,7 +1113,7 @@ public class CatalogoAdminService {
 
         p.setCategoria(categoria);
         p.setNombre(nombre);
-        p.setDescripcion(req.descripcion() != null ? req.descripcion().trim() : null);
+        p.setDescripcion(normalizarDescripcion(req.descripcion()));
         p.setIncluye(req.incluye() != null ? req.incluye().trim() : null);
         p.setGarantia(req.garantia() != null ? req.garantia().trim() : null);
         p.setLema(lema);
@@ -1300,6 +1302,15 @@ public class CatalogoAdminService {
             sku = base + "-" + (System.currentTimeMillis() % 100000) + "-" + i++;
         }
         return sku.toUpperCase();
+    }
+
+    private String normalizarDescripcion(String desc) {
+        if (desc == null) return null;
+        String norm = desc.replace("\r\n", "\n").replace("\r", "\n").strip();
+        if (norm.length() > 2000) {
+            throw new BadRequestException("La descripción no puede superar los 2000 caracteres");
+        }
+        return norm.isEmpty() ? null : norm;
     }
 
     private String slugPart(String text, int len) {
