@@ -1,6 +1,7 @@
 package com.sheis.catalogo.web;
 
 import com.sheis.catalogo.service.CatalogoPublicoService;
+import com.sheis.catalogo.service.ProductoPublicoService;
 import com.sheis.catalogo.web.dto.publico.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +21,8 @@ import java.util.Map;
 
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -34,10 +37,13 @@ class CatalogoPublicoControllerTest {
     @Mock
     private CatalogoPublicoService catalogoPublicoService;
 
+    @Mock
+    private ProductoPublicoService productoPublicoService;
+
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new CatalogoPublicoController(catalogoPublicoService, jsonMapper))
+                .standaloneSetup(new CatalogoPublicoController(catalogoPublicoService, productoPublicoService, jsonMapper))
                 .build();
     }
 
@@ -133,5 +139,91 @@ class CatalogoPublicoControllerTest {
                         .header(HttpHeaders.IF_NONE_MATCH, etag))
                 .andExpect(status().isNotModified())
                 .andExpect(header().string(HttpHeaders.ETAG, etag));
+    }
+
+    @Test
+    @DisplayName("GET /api/public/productos retorna productos paginados")
+    void testObtenerProductosPaginados() throws Exception {
+        ProductoTarjetaPublicoDto tarjeta = new ProductoTarjetaPublicoDto(
+                1L,
+                "audifonos-bluetooth",
+                "Audífonos Bluetooth",
+                "Lo más vendido",
+                "/api/public/productos/1/imagenes/10",
+                45000L,
+                true,
+                "DISPONIBLE",
+                false,
+                2L,
+                "Audífonos",
+                "audifonos"
+        );
+        ProductosPaginadosResponse response = new ProductosPaginadosResponse(
+                List.of(tarjeta), 0, 12, 1L, 1, false
+        );
+
+        when(productoPublicoService.obtenerProductos(any(), any(), any(), anyInt(), anyInt()))
+                .thenReturn(response);
+
+        mockMvc.perform(get("/api/public/productos?categoria=audifonos&q=bluetooth&sort=relevantes&page=0&size=12")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].id", is(1)))
+                .andExpect(jsonPath("$.content[0].slug", is("audifonos-bluetooth")))
+                .andExpect(jsonPath("$.content[0].nombre", is("Audífonos Bluetooth")))
+                .andExpect(jsonPath("$.content[0].precioDesde", is(45000)))
+                .andExpect(jsonPath("$.totalElements", is(1)))
+                .andExpect(jsonPath("$.totalPages", is(1)))
+                .andExpect(jsonPath("$.hasNext", is(false)));
+    }
+
+    @Test
+    @DisplayName("GET /api/public/productos/categorias retorna lista de categorías con conteo")
+    void testObtenerCategoriasConConteo() throws Exception {
+        List<CategoriaConteoDto> categorias = List.of(
+                new CategoriaConteoDto(null, "Todos", "todos", 12),
+                new CategoriaConteoDto(1L, "Audífonos", "audifonos", 4)
+        );
+
+        when(productoPublicoService.obtenerCategoriasConConteo()).thenReturn(categorias);
+
+        mockMvc.perform(get("/api/public/productos/categorias").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].nombre", is("Todos")))
+                .andExpect(jsonPath("$[0].total", is(12)))
+                .andExpect(jsonPath("$[1].nombre", is("Audífonos")))
+                .andExpect(jsonPath("$[1].total", is(4)));
+    }
+
+    @Test
+    @DisplayName("GET /api/public/productos/{idOrSlug} retorna detalle de producto")
+    void testObtenerDetalleProducto() throws Exception {
+        VariantePublicoDto variante = new VariantePublicoDto(
+                100L, "Negro", 45000L, 5
+        );
+        ProductoPublicoDto detalle = new ProductoPublicoDto(
+                1L,
+                "Audífonos Bluetooth",
+                2L,
+                "Lo más vendido",
+                "Descripción de audífonos",
+                List.of("Estuche de carga", "Cable USB-C"),
+                "Garantía de 30 días",
+                "Color",
+                List.of("/api/public/productos/1/imagenes/1"),
+                List.of(variante)
+        );
+
+        when(productoPublicoService.obtenerDetalleProducto("audifonos-bluetooth")).thenReturn(detalle);
+
+        mockMvc.perform(get("/api/public/productos/audifonos-bluetooth").accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(1)))
+                .andExpect(jsonPath("$.nombre", is("Audífonos Bluetooth")))
+                .andExpect(jsonPath("$.categoriaId", is(2)))
+                .andExpect(jsonPath("$.variantes", hasSize(1)))
+                .andExpect(jsonPath("$.variantes[0].nombre", is("Negro")));
     }
 }

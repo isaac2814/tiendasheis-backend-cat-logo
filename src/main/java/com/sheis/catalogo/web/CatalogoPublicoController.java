@@ -5,6 +5,10 @@ import com.sheis.catalogo.service.CatalogoPublicoService;
 import com.sheis.catalogo.service.ImagenMetodoPagoStore;
 import com.sheis.catalogo.service.ImagenProductoStore;
 import com.sheis.catalogo.service.ImagenServicioStore;
+import com.sheis.catalogo.service.ProductoPublicoService;
+import com.sheis.catalogo.web.dto.publico.CategoriaConteoDto;
+import com.sheis.catalogo.web.dto.publico.ProductoPublicoDto;
+import com.sheis.catalogo.web.dto.publico.ProductosPaginadosResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.CacheControl;
@@ -13,14 +17,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.DigestUtils;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.WebRequest;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Duration;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/public")
@@ -35,10 +37,14 @@ public class CatalogoPublicoController {
             CacheControl.maxAge(Duration.ofSeconds(60)).cachePublic().mustRevalidate();
 
     private final CatalogoPublicoService catalogoPublicoService;
+    private final ProductoPublicoService productoPublicoService;
     private final JsonMapper jsonMapper;
 
-    public CatalogoPublicoController(CatalogoPublicoService catalogoPublicoService, JsonMapper jsonMapper) {
+    public CatalogoPublicoController(CatalogoPublicoService catalogoPublicoService,
+                                   ProductoPublicoService productoPublicoService,
+                                   JsonMapper jsonMapper) {
         this.catalogoPublicoService = catalogoPublicoService;
+        this.productoPublicoService = productoPublicoService;
         this.jsonMapper = jsonMapper;
     }
 
@@ -101,6 +107,32 @@ public class CatalogoPublicoController {
                 .header("X-Content-Type-Options", "nosniff")
                 .contentType(MediaType.parseMediaType(imagen.contentType()))
                 .body(imagen.datos());
+    }
+
+    // ==================== PRODUCTOS TECNOLOGÍA PÚBLICOS ====================
+
+    @GetMapping("/productos")
+    @Operation(summary = "Obtiene productos tecnológicos paginados", description = "Permite filtrar por categoría (id o slug), buscar por texto (q) y ordenar por relevantes, precio_asc, precio_desc o nuevos.")
+    public ResponseEntity<ProductosPaginadosResponse> obtenerProductos(
+            @RequestParam(required = false) String categoria,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false, defaultValue = "relevantes") String sort,
+            @RequestParam(required = false, defaultValue = "0") Integer page,
+            @RequestParam(required = false, defaultValue = "12") Integer size) {
+        ProductosPaginadosResponse resp = productoPublicoService.obtenerProductos(categoria, q, sort, page, size);
+        return ResponseEntity.ok(resp);
+    }
+
+    @GetMapping("/productos/categorias")
+    @Operation(summary = "Obtiene las categorías de tecnología con conteo de productos", description = "Retorna categorías activas con la cantidad de productos disponibles y el total general en el primer elemento.")
+    public ResponseEntity<List<CategoriaConteoDto>> obtenerCategoriasConConteo() {
+        return ResponseEntity.ok(productoPublicoService.obtenerCategoriasConConteo());
+    }
+
+    @GetMapping("/productos/{idOrSlug}")
+    @Operation(summary = "Obtiene el detalle de un producto por ID o Slug", description = "Retorna la ficha completa del producto con sus variantes activas, imágenes y características.")
+    public ResponseEntity<ProductoPublicoDto> obtenerDetalleProducto(@PathVariable String idOrSlug) {
+        return ResponseEntity.ok(productoPublicoService.obtenerDetalleProducto(idOrSlug));
     }
 }
 

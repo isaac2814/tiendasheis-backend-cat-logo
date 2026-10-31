@@ -14,6 +14,8 @@ public interface ProductoVarianteRepository extends JpaRepository<ProductoVarian
 
     List<ProductoVariante> findByProductoIdAndActivaTrueOrderByOrdenAscIdAsc(Long productoId);
 
+    List<ProductoVariante> findByActivaTrueOrderByOrdenAscIdAsc();
+
     boolean existsBySkuIgnoreCase(String sku);
 
     boolean existsBySkuIgnoreCaseAndIdNot(String sku, Long id);

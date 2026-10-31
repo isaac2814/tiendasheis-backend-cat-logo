@@ -1,6 +1,7 @@
 package com.sheis.catalogo.repository;
 
 import com.sheis.catalogo.domain.ProductoImagen;
+import com.sheis.catalogo.web.dto.publico.ProductoImagenMeta;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -19,4 +20,7 @@ public interface ProductoImagenRepository extends JpaRepository<ProductoImagen, 
 
     @Query("SELECT MAX(pi.orden) FROM ProductoImagen pi WHERE pi.producto.id = :productoId")
     Optional<Integer> findMaxOrdenByProductoId(Long productoId);
+
+    @Query("SELECT new com.sheis.catalogo.web.dto.publico.ProductoImagenMeta(pi.id, pi.producto.id, pi.actualizadoEn) FROM ProductoImagen pi ORDER BY pi.orden ASC, pi.id ASC")
+    List<ProductoImagenMeta> findAllMetasOrderByOrdenAscIdAsc();
 }
