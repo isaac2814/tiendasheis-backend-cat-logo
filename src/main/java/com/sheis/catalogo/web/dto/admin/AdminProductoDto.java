@@ -15,5 +15,24 @@ public record AdminProductoDto(
         Integer orden,
         Boolean visible,
         List<AdminProductoImagenDto> imagenes,
-        List<AdminProductoVarianteDto> variantes
-) {}
+        List<AdminProductoVarianteDto> variantes,
+        ProductoVideoDto video
+) {
+    public AdminProductoDto(
+            Long id,
+            Long categoriaId,
+            String categoriaNombre,
+            String nombre,
+            String descripcion,
+            String incluye,
+            String garantia,
+            String lema,
+            String etiquetaVariante,
+            Integer orden,
+            Boolean visible,
+            List<AdminProductoImagenDto> imagenes,
+            List<AdminProductoVarianteDto> variantes
+    ) {
+        this(id, categoriaId, categoriaNombre, nombre, descripcion, incluye, garantia, lema, etiquetaVariante, orden, visible, imagenes, variantes, null);
+    }
+}

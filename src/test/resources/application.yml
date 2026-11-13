@@ -38,3 +38,5 @@ app:
   admin:
     email: admin@test.com
     password: AdminPasswordTest123!
+  r2:
+    enabled: false

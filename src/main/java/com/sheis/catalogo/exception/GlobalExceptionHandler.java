@@ -82,6 +82,28 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(UnprocessableEntityException.class)
+    public ProblemDetail handleUnprocessableEntity(UnprocessableEntityException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.UNPROCESSABLE_ENTITY,
+                ex.getMessage()
+        );
+        problem.setTitle("Entidad no procesable");
+        problem.setType(URI.create("urn:problem:unprocessable-entity"));
+        return problem;
+    }
+
+    @ExceptionHandler(ServiceUnavailableException.class)
+    public ProblemDetail handleServiceUnavailable(ServiceUnavailableException ex) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                ex.getMessage()
+        );
+        problem.setTitle("Servicio no disponible");
+        problem.setType(URI.create("urn:problem:service-unavailable"));
+        return problem;
+    }
+
     @ExceptionHandler({BadCredentialsException.class, AuthenticationException.class})
     public ProblemDetail handleUnauthorized(Exception ex) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(

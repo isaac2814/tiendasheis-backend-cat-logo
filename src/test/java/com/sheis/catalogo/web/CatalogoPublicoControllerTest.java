@@ -40,10 +40,13 @@ class CatalogoPublicoControllerTest {
     @Mock
     private ProductoPublicoService productoPublicoService;
 
+    @Mock
+    private com.sheis.catalogo.service.media.RecomendacionService recomendacionService;
+
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders
-                .standaloneSetup(new CatalogoPublicoController(catalogoPublicoService, productoPublicoService, jsonMapper))
+                .standaloneSetup(new CatalogoPublicoController(catalogoPublicoService, productoPublicoService, recomendacionService, jsonMapper))
                 .build();
     }
 

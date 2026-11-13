@@ -12,5 +12,21 @@ public record ProductoPublicoDto(
         String garantia,
         String etiquetaVariante,
         List<String> imagenes,
-        List<VariantePublicoDto> variantes
-) {}
+        List<VariantePublicoDto> variantes,
+        ProductoVideoPublicoDto video
+) {
+    public ProductoPublicoDto(
+            Long id,
+            String nombre,
+            Long categoriaId,
+            String lema,
+            String descripcion,
+            List<String> incluye,
+            String garantia,
+            String etiquetaVariante,
+            List<String> imagenes,
+            List<VariantePublicoDto> variantes
+    ) {
+        this(id, nombre, categoriaId, lema, descripcion, incluye, garantia, etiquetaVariante, imagenes, variantes, null);
+    }
+}

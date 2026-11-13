@@ -43,6 +43,7 @@ public class AppProperties {
     private Admin admin = new Admin();
     private Proxy proxy = new Proxy();
     private Security security = new Security();
+    private R2 r2 = new R2();
 
     @Getter
     @Setter
@@ -115,6 +116,22 @@ public class AppProperties {
          * se desactiva (springdoc deshabilitado + perfil prod con este flag en {@code false}).
          */
         private boolean permitSwagger = true;
+    }
+
+    @Getter
+    @Setter
+    public static class R2 {
+        private boolean enabled = false;
+        private String accountId = "";
+        private String accessKeyId = "";
+        private String secretAccessKey = "";
+        private String bucket = "";
+        private String publicBaseUrl = "";
+
+        public String getNormalizedPublicBaseUrl() {
+            if (publicBaseUrl == null) return "";
+            return publicBaseUrl.replaceAll("/+$", "").trim();
+        }
     }
 
     @PostConstruct

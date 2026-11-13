@@ -25,15 +25,21 @@ public class ProductoPublicoService {
     private final ProductoVarianteRepository productoVarianteRepository;
     private final ProductoImagenRepository productoImagenRepository;
     private final CategoriaProductoRepository categoriaProductoRepository;
+    private final com.sheis.catalogo.repository.ProductoVideoRepository productoVideoRepository;
+    private final com.sheis.catalogo.service.media.MediaStorage mediaStorage;
 
     public ProductoPublicoService(ProductoRepository productoRepository,
                                   ProductoVarianteRepository productoVarianteRepository,
                                   ProductoImagenRepository productoImagenRepository,
-                                  CategoriaProductoRepository categoriaProductoRepository) {
+                                  CategoriaProductoRepository categoriaProductoRepository,
+                                  com.sheis.catalogo.repository.ProductoVideoRepository productoVideoRepository,
+                                  com.sheis.catalogo.service.media.MediaStorage mediaStorage) {
         this.productoRepository = productoRepository;
         this.productoVarianteRepository = productoVarianteRepository;
         this.productoImagenRepository = productoImagenRepository;
         this.categoriaProductoRepository = categoriaProductoRepository;
+        this.productoVideoRepository = productoVideoRepository;
+        this.mediaStorage = mediaStorage;
     }
 
     /**
@@ -78,6 +84,12 @@ public class ProductoPublicoService {
                         img -> img,
                         (existing, replacement) -> existing
                 ));
+
+        // Videos por productoId
+        List<Long> todosProdIds = visibles.stream().map(Producto::getId).toList();
+        Map<Long, com.sheis.catalogo.domain.ProductoVideo> videoPorProducto = productoVideoRepository
+                .findByProductoIdIn(todosProdIds).stream()
+                .collect(Collectors.toMap(pv -> pv.getProducto().getId(), pv -> pv, (a, b) -> a));
 
         // 2. Mapear y filtrar productos válidos (con al menos una variante activa)
         List<ProductoTarjetaPublicoDto> filtrados = new ArrayList<>();
@@ -135,6 +147,10 @@ public class ProductoPublicoService {
             String catSlug = SlugUtils.toSlug(catNombre);
             String prodSlug = SlugUtils.toSlug(p.getNombre());
 
+            com.sheis.catalogo.domain.ProductoVideo pVideo = videoPorProducto.get(p.getId());
+            boolean tieneVideo = pVideo != null;
+            Integer duracionSeg = pVideo != null ? pVideo.getDuracionSeg() : null;
+
             filtrados.add(new ProductoTarjetaPublicoDto(
                     p.getId(),
                     prodSlug,
@@ -147,7 +163,9 @@ public class ProductoPublicoService {
                     precioVaria,
                     p.getCategoria().getId(),
                     catNombre,
-                    catSlug
+                    catSlug,
+                    tieneVideo,
+                    duracionSeg
             ));
         }
 
@@ -281,6 +299,15 @@ public class ProductoPublicoService {
                         .filter(s -> !s.isEmpty())
                         .toList();
 
+        com.sheis.catalogo.domain.ProductoVideo pVideo = productoVideoRepository.findByProductoId(producto.getId()).orElse(null);
+        ProductoVideoPublicoDto videoDto = (pVideo != null)
+                ? new ProductoVideoPublicoDto(
+                        mediaStorage.publicUrl(pVideo.getObjectKey()),
+                        mediaStorage.publicUrl(pVideo.getPosterKey()),
+                        pVideo.getDuracionSeg()
+                )
+                : null;
+
         return new ProductoPublicoDto(
                 producto.getId(),
                 producto.getNombre(),
@@ -291,7 +318,8 @@ public class ProductoPublicoService {
                 producto.getGarantia(),
                 producto.getEtiquetaVariante(),
                 imgUrls,
-                varDtos
+                varDtos,
+                videoDto
         );
     }
 

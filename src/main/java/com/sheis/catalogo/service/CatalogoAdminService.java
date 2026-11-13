@@ -41,6 +41,7 @@ public class CatalogoAdminService {
     private final ProductoVarianteRepository productoVarianteRepository;
     private final ProductoImagenRepository productoImagenRepository;
     private final ImagenProductoStore imagenProductoStore;
+    private final com.sheis.catalogo.service.media.ProductoVideoService productoVideoService;
 
     public CatalogoAdminService(SkuCategoriaRepository skuCategoriaRepository,
                                 ServicioRepository servicioRepository,
@@ -58,7 +59,8 @@ public class CatalogoAdminService {
                                 ProductoRepository productoRepository,
                                 ProductoVarianteRepository productoVarianteRepository,
                                 ProductoImagenRepository productoImagenRepository,
-                                ImagenProductoStore imagenProductoStore) {
+                                ImagenProductoStore imagenProductoStore,
+                                com.sheis.catalogo.service.media.ProductoVideoService productoVideoService) {
         this.skuCategoriaRepository = skuCategoriaRepository;
         this.servicioRepository = servicioRepository;
         this.tarifaRepository = tarifaRepository;
@@ -76,6 +78,7 @@ public class CatalogoAdminService {
         this.productoVarianteRepository = productoVarianteRepository;
         this.productoImagenRepository = productoImagenRepository;
         this.imagenProductoStore = imagenProductoStore;
+        this.productoVideoService = productoVideoService;
     }
 
     @Transactional(readOnly = true)
@@ -914,6 +917,8 @@ public class CatalogoAdminService {
                 ))
                 .toList();
 
+        ProductoVideoDto videoDto = productoVideoService.obtenerVideoPorProducto(p.getId()).orElse(null);
+
         return new AdminProductoDto(
                 p.getId(),
                 p.getCategoria().getId(),
@@ -927,7 +932,8 @@ public class CatalogoAdminService {
                 p.getOrden(),
                 p.getVisible(),
                 imagenes,
-                variantes
+                variantes,
+                videoDto
         );
     }
 
@@ -1152,6 +1158,7 @@ public class CatalogoAdminService {
     public void eliminarProducto(Long id) {
         Producto p = productoRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado con ID: " + id));
+        productoVideoService.eliminarVideo(id);
         productoRepository.delete(p);
     }
 

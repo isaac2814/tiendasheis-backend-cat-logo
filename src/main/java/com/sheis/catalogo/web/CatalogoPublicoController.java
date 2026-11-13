@@ -38,13 +38,16 @@ public class CatalogoPublicoController {
 
     private final CatalogoPublicoService catalogoPublicoService;
     private final ProductoPublicoService productoPublicoService;
+    private final com.sheis.catalogo.service.media.RecomendacionService recomendacionService;
     private final JsonMapper jsonMapper;
 
     public CatalogoPublicoController(CatalogoPublicoService catalogoPublicoService,
                                    ProductoPublicoService productoPublicoService,
+                                   com.sheis.catalogo.service.media.RecomendacionService recomendacionService,
                                    JsonMapper jsonMapper) {
         this.catalogoPublicoService = catalogoPublicoService;
         this.productoPublicoService = productoPublicoService;
+        this.recomendacionService = recomendacionService;
         this.jsonMapper = jsonMapper;
     }
 
@@ -133,6 +136,16 @@ public class CatalogoPublicoController {
     @Operation(summary = "Obtiene el detalle de un producto por ID o Slug", description = "Retorna la ficha completa del producto con sus variantes activas, imágenes y características.")
     public ResponseEntity<ProductoPublicoDto> obtenerDetalleProducto(@PathVariable String idOrSlug) {
         return ResponseEntity.ok(productoPublicoService.obtenerDetalleProducto(idOrSlug));
+    }
+
+    @GetMapping("/recomendaciones")
+    @Operation(summary = "Obtiene las recomendaciones públicas activas paginadas")
+    public ResponseEntity<com.sheis.catalogo.web.dto.publico.PublicRecomendacionesResponse> obtenerRecomendaciones(
+            @RequestParam(required = false) String categoria,
+            @RequestParam(required = false) Long productoId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "8") int size) {
+        return ResponseEntity.ok(recomendacionService.obtenerPublicas(categoria, productoId, page, size));
     }
 }
 

@@ -43,6 +43,12 @@ class ProductoPublicoServiceTest {
     @Mock
     private CategoriaProductoRepository categoriaProductoRepository;
 
+    @Mock
+    private com.sheis.catalogo.repository.ProductoVideoRepository productoVideoRepository;
+
+    @Mock
+    private com.sheis.catalogo.service.media.MediaStorage mediaStorage;
+
     @InjectMocks
     private ProductoPublicoService productoPublicoService;
 
